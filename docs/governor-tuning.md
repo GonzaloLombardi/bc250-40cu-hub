@@ -75,24 +75,38 @@ Q4_K_M) was run at 40 CU. Temp/power are post-run steady state.
 |---|---|---|---|---|---|
 | 1500 MHz | 873 | 837 mV* | 53 °C | 53 W | efficient/cool |
 | 1700 MHz | 983 | 912 mV | 57 °C | 64 W | **sweet spot** |
-| 1850 MHz | 1062 | 918 mV | 60 °C | 80 W | top of the sweep below |
-| **2000 MHz** | ~1140 (est.) | 960 mV | **~90–96 °C** (community) | ~100 W+ | **available — your call** ↓ |
+| 1850 MHz | 1062 | 918 mV | 60 °C | 80 W | balanced |
+| **2000 MHz** | **1144** | 960 mV | **73 °C peak** ‡ | ~161 W peak ‡ | **held full clock, no throttle** ‡ |
 
 \* observed SMU voltage at that point on this board.
-The 2000 MHz row is **not measured here** (the sweep above was capped at 1850 MHz on purpose);
-the figures are an extrapolation plus community thermal reports. The safe-point exists in the
-default config, so **the ceiling is yours to choose** — see
-[Going to 2000 MHz](#going-to-2000-mhz-the-top-safe-point) below.
+
+‡ The 2000 MHz row was measured **live with a temp watchdog** (peak sampling), so its temp/power
+are *transient peaks* under load; the 1500–1850 rows show *post-run steady* values, so the power
+columns aren't directly comparable (the same 2000 MHz run that peaked at 161 W read ~71 W moments
+after it finished). On **this board's cooling** it held a flat 2000 MHz with **no throttling and
+only 73 °C** — but that number is the single most cooling-dependent figure in this whole doc
+(see the ❄️ note below).
+
+> ### ❄️ Everything here is cooling-dependent
+>
+> These temps reflect **one specific board + cooling setup**. The BC-250's thermals vary
+> enormously with airflow, heatsink/fan, paste, ambient, and case. A board that hits 73 °C at
+> 2000 MHz on good cooling can hit **90–96 °C** (community-reported) on weak cooling — same
+> registers, same clocks. **Treat the numbers above as *your* potential ceiling only after you
+> measure your own board.** Improving cooling is usually the highest-leverage change: it's what
+> turns "2000 MHz throttles/crashes" into "2000 MHz runs cool." Always keep `throttling = 85`
+> on and watch temps live the first time you push clocks.
 
 **Takeaways:**
 - Throughput scales **almost linearly** with frequency (1500 → 1850 MHz: +23% clock → +22%
   tok/s).
 - **Power scales faster than performance.** The 1700 → 1850 step buys ~+8% throughput for
   ~+25% power (64 → 80 W). **1700 MHz is the efficiency sweet spot.**
-- All well within thermal limits (≤ 60 °C) with the 40 CU unlock active **up to 1850 MHz**.
-- **2000 MHz is fully available** (it's the top safe-point shipped in the default config) — it
-  just wasn't part of this conservative sweep. Expect noticeably higher heat/power; the
-  decision is yours (see below).
+- All well within thermal limits with the 40 CU unlock active across the whole range:
+  ≤ 60 °C up to 1850 MHz, and **73 °C peak even at a sustained 2000 MHz** on this board.
+- **2000 MHz held full clock with no throttling here** and is the top safe-point in the
+  default config — but heat/power climb steeply (peak ~161 W) and the temp is heavily
+  cooling-dependent. The decision is yours (see below).
 
 > Note: combine this with the unlock — at a *fixed* clock, going 24 → 40 CU is the larger
 > win (≈1.55× from the [unlock benchmark](bazzite-40cu-runtime-umr.md#step-5--verify-it-does-real-work-benchmark));
@@ -124,9 +138,11 @@ watch -n1 'echo "$(($(cat '"$HW"'/temp1_input)/1000))C $(($(cat '"$HW"'/power1_a
 
 The default config already ships a `2000 MHz / 960 mV` safe-point — the unlock doesn't cap
 your clocks, so **whether to use it is entirely your decision**. It's the highest-throughput
-setting, at the cost of meaningfully more heat and power. Community reports put **40 CU @
-2000 MHz around ~90–96 °C**, so it's a "good cooling + monitoring" setting, not a fire-and-
-forget one.
+setting (**1144 tok/s here, ~1.08× over 1850 MHz**), at the cost of meaningfully more heat and
+power (peak ~161 W). On the test board's cooling it held a flat 2000 MHz with **no throttling
+at 73 °C peak** — but community boards with weaker cooling report **~90–96 °C** at this exact
+setting. Same registers, wildly different temps: it's a "know your cooling + monitor" setting,
+not fire-and-forget.
 
 To raise the ceiling so the governor can reach 2000 MHz under load:
 
