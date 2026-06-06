@@ -58,8 +58,16 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   read harvest map → dry-run → apply → **A/B benchmark (1.55×)** → systemd persistence →
   revert. Includes the kernel-version pitfall and troubleshooting.
 - 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
-  `config.toml` explained, plus a **measured frequency sweep at 40 CU** (1500/1700/1850 MHz →
-  throughput, temp, power) identifying **1700 MHz as the efficiency sweet spot**.
+  `config.toml` explained, plus a **measured frequency sweep at 40 CU** (1500/1700/1850/2000 MHz →
+  throughput, temp, power), the **1700 MHz efficiency sweet spot**, and a cooling-dependency note.
+- 🧩 **[Selective WGP/CU masking](docs/selective-wgp-masking.md)** — for **scattered-harvest or
+  faulty-WGP boards**: `SE.SH.WGP` addressing, `enable-wgp`/`disable-wgp`, the driver-active
+  lock, a bisection workflow to find a bad WGP, and persisting a custom (e.g. 38/40) layout.
+- 🛠️ **[Kernel-patch method (mutable distros)](docs/kernel-patch-mutable-distros.md)** — quick
+  reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
+  PKGBUILD), with verification and revert. *Not for atomic distros — use runtime-UMR there.*
+
+See also: [`upstream/`](upstream/) — drafted bug report for an upstream project.
 
 ### Gotchas worth knowing
 - **Unstable DRI instance breaks boot persistence.** `write-service-table` bakes the current
@@ -102,12 +110,13 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 ## Status & roadmap
 
 - [x] Bazzite runtime-UMR guide (tested, with benchmark)
-- [ ] Selective WGP masking guide for scattered-harvest boards
+- [x] Selective WGP masking guide for scattered-harvest boards
 - [x] Governor tuning notes (safe-point profiles, thermal data)
-- [ ] Mutable-distro (kernel patch) quickstart cross-link
-- [ ] Report upstream: `write-service-table` bakes a volatile `UMR_INSTANCE` → should write
-      it empty (auto-detect) or auto-detect in `apply-service` ([WinnieLV])
+- [x] Mutable-distro (kernel patch) quickstart cross-link
+- [x] Draft upstream bug report: `write-service-table` bakes a volatile `UMR_INSTANCE`
+      ([draft](upstream/winnielv-umr-instance-issue.md)) — pending: actually file it
 - [ ] Decide on upstream contributions (PRs to elektricM docs / WinnieLV README)
+- [ ] Polish: add a LICENSE, optional screenshots
 
 ---
 
