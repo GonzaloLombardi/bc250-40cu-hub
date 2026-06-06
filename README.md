@@ -115,12 +115,17 @@ See also: [`upstream/`](upstream/) — drafted bug report for an upstream projec
 - [x] Mutable-distro (kernel patch) quickstart cross-link
 - [x] Draft upstream bug report: `write-service-table` bakes a volatile `UMR_INSTANCE`
       ([draft](upstream/winnielv-umr-instance-issue.md)) — pending: actually file it
+- [x] Polish: add a LICENSE (CC BY 4.0)
 - [ ] Decide on upstream contributions (PRs to elektricM docs / WinnieLV README)
-- [ ] Polish: add a LICENSE, optional screenshots
+- [ ] Optional: screenshots / asciinema of `status` + benchmark
 
 ---
 
 ## Credits & license
+
+The original documentation in this repo is licensed under
+**[CC BY 4.0](LICENSE)** — reuse and adapt freely **with attribution** (e.g. *"based on
+bc250-40cu-hub by GonzaloLombardi, CC BY 4.0"* + a link back).
 
 All upstream work belongs to its respective authors (linked above) under their own
 licenses. This repo is an independent index + original documentation; it redistributes
