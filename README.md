@@ -57,6 +57,9 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   tested end-to-end on Bazzite 44 / kernel 7.0.9-fc44: rollback pin → layer `umr` →
   read harvest map → dry-run → apply → **A/B benchmark (1.55×)** → systemd persistence →
   revert. Includes the kernel-version pitfall and troubleshooting.
+- 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
+  `config.toml` explained, plus a **measured frequency sweep at 40 CU** (1500/1700/1850 MHz →
+  throughput, temp, power) identifying **1700 MHz as the efficiency sweet spot**.
 
 ### Gotchas worth knowing
 - **Unstable DRI instance breaks boot persistence.** `write-service-table` bakes the current
@@ -100,7 +103,7 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 
 - [x] Bazzite runtime-UMR guide (tested, with benchmark)
 - [ ] Selective WGP masking guide for scattered-harvest boards
-- [ ] Governor tuning notes (safe-point profiles, thermal data)
+- [x] Governor tuning notes (safe-point profiles, thermal data)
 - [ ] Mutable-distro (kernel patch) quickstart cross-link
 - [ ] Report upstream: `write-service-table` bakes a volatile `UMR_INSTANCE` → should write
       it empty (auto-detect) or auto-detect in `apply-service` ([WinnieLV])
