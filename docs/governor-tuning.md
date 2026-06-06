@@ -75,18 +75,24 @@ Q4_K_M) was run at 40 CU. Temp/power are post-run steady state.
 |---|---|---|---|---|---|
 | 1500 MHz | 873 | 837 mV* | 53 °C | 53 W | efficient/cool |
 | 1700 MHz | 983 | 912 mV | 57 °C | 64 W | **sweet spot** |
-| 1850 MHz | 1062 | 918 mV | 60 °C | 80 W | top of stock cap |
+| 1850 MHz | 1062 | 918 mV | 60 °C | 80 W | top of the sweep below |
+| **2000 MHz** | ~1140 (est.) | 960 mV | **~90–96 °C** (community) | ~100 W+ | **available — your call** ↓ |
 
 \* observed SMU voltage at that point on this board.
+The 2000 MHz row is **not measured here** (the sweep above was capped at 1850 MHz on purpose);
+the figures are an extrapolation plus community thermal reports. The safe-point exists in the
+default config, so **the ceiling is yours to choose** — see
+[Going to 2000 MHz](#going-to-2000-mhz-the-top-safe-point) below.
 
 **Takeaways:**
 - Throughput scales **almost linearly** with frequency (1500 → 1850 MHz: +23% clock → +22%
   tok/s).
 - **Power scales faster than performance.** The 1700 → 1850 step buys ~+8% throughput for
   ~+25% power (64 → 80 W). **1700 MHz is the efficiency sweet spot.**
-- All well within thermal limits (≤ 60 °C) with the 40 CU unlock active. Community data
-  warns that pushing **2000 MHz at 40 CU** can approach ~90–96 °C — only go there with good
-  cooling and live temp monitoring.
+- All well within thermal limits (≤ 60 °C) with the 40 CU unlock active **up to 1850 MHz**.
+- **2000 MHz is fully available** (it's the top safe-point shipped in the default config) — it
+  just wasn't part of this conservative sweep. Expect noticeably higher heat/power; the
+  decision is yours (see below).
 
 > Note: combine this with the unlock — at a *fixed* clock, going 24 → 40 CU is the larger
 > win (≈1.55× from the [unlock benchmark](bazzite-40cu-runtime-umr.md#step-5--verify-it-does-real-work-benchmark));
@@ -114,10 +120,40 @@ watch -n1 'echo "$(($(cat '"$HW"'/temp1_input)/1000))C $(($(cat '"$HW"'/power1_a
 
 ---
 
+## Going to 2000 MHz (the top safe-point)
+
+The default config already ships a `2000 MHz / 960 mV` safe-point — the unlock doesn't cap
+your clocks, so **whether to use it is entirely your decision**. It's the highest-throughput
+setting, at the cost of meaningfully more heat and power. Community reports put **40 CU @
+2000 MHz around ~90–96 °C**, so it's a "good cooling + monitoring" setting, not a fire-and-
+forget one.
+
+To raise the ceiling so the governor can reach 2000 MHz under load:
+
+```bash
+sudo sed -i 's/^\s*max = .*/max = 2000/' /etc/cyan-skillfish-governor-smu/config.toml
+sudo systemctl restart cyan-skillfish-governor-smu
+```
+
+Then **stress-test while watching temps live** (use the `watch` one-liner above, or the
+`llama-bench` loop from the unlock guide). The `throttling = 85` line is your safety net — it
+will clock down before things get dangerous. Recommended checks before keeping it:
+
+- Temp stays below your comfort threshold under sustained load (the 85 °C throttle is a
+  ceiling, not a target — many prefer to keep peaks in the low 80s).
+- No GPU resets/crashes in `dmesg` during a stress run.
+- If unstable, either drop `max` back to 1850, or nudge the 2000 MHz safe-point's `voltage`
+  up a touch (e.g. 960 → 970 mV) for more headroom.
+
+Revert anytime: set `max` back to `1850` (or `1700`) and restart the service.
+
 ## Recommended starting point
 
-- **Daily driver:** `max = 1700` (sweet spot) or `1850` if you want max throughput and have
-  cooling headroom; keep `throttling = 85`.
+- **Efficiency:** `max = 1700` (the measured sweet spot) — coolest/quietest for ~92% of peak.
+- **Balanced:** `max = 1850` — top of the tested range, still ≤ 60 °C here.
+- **Max performance:** `max = 2000` — highest throughput, runs hot (~90 °C+); your call, with
+  cooling + monitoring (see [Going to 2000 MHz](#going-to-2000-mhz-the-top-safe-point)).
+- Keep `throttling = 85` on at every tier.
 - **Undervolt cautiously:** drop a safe-point's `voltage` by 10–20 mV at a time, stress-test
   (the unlock guide's `llama-bench` loop, or furmark/OCCT), and back off on any instability.
 - Enable the service so settings persist: `sudo systemctl enable cyan-skillfish-governor-smu`.
