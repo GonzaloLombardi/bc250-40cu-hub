@@ -116,7 +116,8 @@ See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-li
 - [x] Report upstream: `write-service-table` bakes a volatile `UMR_INSTANCE` — filed as
       [WinnieLV/bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)
       (follow-up to their #1)
-- [ ] Optional: offer a PR to WinnieLV for the fix (blank `UMR_INSTANCE` / re-detect at boot)
+- [x] Fix implemented + hardware-tested; PR ready (not yet opened) on branch
+      `GonzaloLombardi:fix-unstable-dri-instance` — [draft](upstream/winnielv-pr-fix.md)
 - [x] Polish: add a LICENSE (CC BY 4.0)
 - [ ] Decide on upstream contributions (PRs to elektricM docs / WinnieLV README)
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
