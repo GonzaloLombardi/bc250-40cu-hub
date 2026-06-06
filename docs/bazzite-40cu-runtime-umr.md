@@ -213,6 +213,28 @@ The service writes the saved mask at every boot. Config lives in
 (→ `/var/usrlocal/bin` on Bazzite). Reboot once and re-check `status` to confirm 40/40 is
 reapplied automatically.
 
+> ### ⚠️ Important: blank `UMR_INSTANCE` so the service survives every boot
+>
+> `write-service-table` bakes the **current** umr DRI instance into the config
+> (e.g. `UMR_INSTANCE=1`). But the DRI instance number is **not stable across boots** —
+> the same board can enumerate as `/dev/dri/card1` (instance 1) on one boot and `card0`
+> (instance 0) on the next (notably after a full power-cycle). When that happens, the boot
+> service runs `umr -i <wrong>` and fails with:
+> ```
+> [ERR ] failed to read cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK with umr
+> ```
+> leaving you silently back at 24 CU. **Fix:** blank the baked instance so the script
+> auto-detects the right one each boot (it matches the BC-250 BDF in
+> `/sys/kernel/debug/dri/`, which it can read as the root service):
+> ```bash
+> sudo sed -i 's/^UMR_INSTANCE=.*/UMR_INSTANCE=/' /etc/bc250-cu-live-manager.conf
+> sudo systemctl restart bc250-cu-live-manager.service
+> sudo ~/bc250-cu-live-manager.sh status   # UMR inst should now read "N (auto)"
+> ```
+> Do this **after** every `write-service-table` (it re-bakes the instance each time).
+> Verified: with `UMR_INSTANCE=` empty, the service correctly applied 40/40 across boots
+> that enumerated the GPU as instance 0 *and* instance 1.
+
 ---
 
 ## Reverting
@@ -239,6 +261,11 @@ A plain reboot **without** the service installed always returns to stock 24 CU.
   nodes, so a missing `umr` means the unlock silently doesn't apply (it won't break boot).
 - **`failed to read … with umr` / wrong instance** — pass `-i N` (`--umr-instance`). The
   script auto-detects via `/sys/kernel/debug/dri`, but multi-GPU hosts may need it explicit.
+- **Boot service fails / drops back to 24 CU after a (cold) boot** — the saved
+  `UMR_INSTANCE` no longer matches because DRI numbering changed between boots. Blank it so
+  the service auto-detects each boot — see the ⚠️ box in [Step 6](#step-6--persist-across-reboots-optional).
+  Quick check: `journalctl -u bc250-cu-live-manager.service -b` showing
+  `failed to read … with umr` + `systemctl is-active …` = `failed`.
 - **Crash / freeze right after `enable all`** — likely a board with genuinely defective
   (scattered) WGPs. Reboot to recover, then enable WGPs incrementally and test.
 - **No throughput gain** — make sure the workload is GPU/compute-bound and fully offloaded

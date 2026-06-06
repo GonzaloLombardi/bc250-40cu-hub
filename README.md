@@ -58,6 +58,13 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   read harvest map → dry-run → apply → **A/B benchmark (1.55×)** → systemd persistence →
   revert. Includes the kernel-version pitfall and troubleshooting.
 
+### Gotchas worth knowing
+- **Unstable DRI instance breaks boot persistence.** `write-service-table` bakes the current
+  `UMR_INSTANCE` into the boot config, but the DRI number isn't stable across boots (a
+  power-cycle flips `card1`↔`card0`), so the service can silently fail back to 24 CU. Blank
+  `UMR_INSTANCE` so it auto-detects each boot —
+  [details & fix](docs/bazzite-40cu-runtime-umr.md#️-important-blank-umr_instance-so-the-service-survives-every-boot).
+
 ---
 
 ## Reference index
@@ -95,6 +102,8 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 - [ ] Selective WGP masking guide for scattered-harvest boards
 - [ ] Governor tuning notes (safe-point profiles, thermal data)
 - [ ] Mutable-distro (kernel patch) quickstart cross-link
+- [ ] Report upstream: `write-service-table` bakes a volatile `UMR_INSTANCE` → should write
+      it empty (auto-detect) or auto-detect in `apply-service` ([WinnieLV])
 - [ ] Decide on upstream contributions (PRs to elektricM docs / WinnieLV README)
 
 ---
