@@ -67,7 +67,7 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
   PKGBUILD), with verification and revert. *Not for atomic distros — use runtime-UMR there.*
 
-See also: [`upstream/`](upstream/) — drafted bug report for an upstream project.
+See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3).
 
 ### Gotchas worth knowing
 - **Unstable DRI instance breaks boot persistence.** `write-service-table` bakes the current
@@ -113,8 +113,10 @@ See also: [`upstream/`](upstream/) — drafted bug report for an upstream projec
 - [x] Selective WGP masking guide for scattered-harvest boards
 - [x] Governor tuning notes (safe-point profiles, thermal data)
 - [x] Mutable-distro (kernel patch) quickstart cross-link
-- [x] Draft upstream bug report: `write-service-table` bakes a volatile `UMR_INSTANCE`
-      ([draft](upstream/winnielv-umr-instance-issue.md)) — pending: actually file it
+- [x] Report upstream: `write-service-table` bakes a volatile `UMR_INSTANCE` — filed as
+      [WinnieLV/bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)
+      (follow-up to their #1)
+- [ ] Optional: offer a PR to WinnieLV for the fix (blank `UMR_INSTANCE` / re-detect at boot)
 - [x] Polish: add a LICENSE (CC BY 4.0)
 - [ ] Decide on upstream contributions (PRs to elektricM docs / WinnieLV README)
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
