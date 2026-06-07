@@ -67,9 +67,12 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
   PKGBUILD), with verification and revert. *Not for atomic distros — use runtime-UMR there.*
 
-Validate a board quickly: [`scripts/validate-40cu.sh`](scripts/validate-40cu.sh) — checks the
-SPI/CC registers on all 4 shader arrays (PASS/FAIL) and, with `--bench`, runs a pp512 compute
-check. `sudo ./validate-40cu.sh [--bench]`.
+Validate a board quickly:
+- [`scripts/validate-40cu.sh`](scripts/validate-40cu.sh) — checks the SPI/CC registers on all
+  4 shader arrays (PASS/FAIL); `--bench` adds a pp512 run. `sudo ./validate-40cu.sh [--bench]`.
+- [`scripts/benchmark-40cu.sh`](scripts/benchmark-40cu.sh) — **A/B proof**: measures pp512 at
+  40 CU vs 24 CU and reports the speedup (~1.55× = PASS). Restores 40 CU on exit.
+  `sudo ./benchmark-40cu.sh`.
 
 See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3).
 
