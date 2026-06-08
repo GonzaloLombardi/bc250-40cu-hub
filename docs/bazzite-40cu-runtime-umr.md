@@ -215,6 +215,11 @@ reapplied automatically.
 
 > ### ⚠️ Important: blank `UMR_INSTANCE` so the service survives every boot
 >
+> **Fixed upstream in [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373)**
+> (reported as [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)). On current
+> versions `apply-service` auto-detects the instance each run, so there's nothing to do — this
+> section applies only to **older builds**. For reference, the original problem:
+>
 > `write-service-table` bakes the **current** umr DRI instance into the config
 > (e.g. `UMR_INSTANCE=1`). But the DRI instance number is **not stable across boots** —
 > the same board can enumerate as `/dev/dri/card1` (instance 1) on one boot and `card0`

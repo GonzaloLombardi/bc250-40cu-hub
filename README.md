@@ -77,11 +77,14 @@ Validate a board quickly:
 See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3).
 
 ### Gotchas worth knowing
-- **Unstable DRI instance breaks boot persistence.** `write-service-table` bakes the current
-  `UMR_INSTANCE` into the boot config, but the DRI number isn't stable across boots (a
-  power-cycle flips `card1`↔`card0`), so the service can silently fail back to 24 CU. Blank
-  `UMR_INSTANCE` so it auto-detects each boot —
-  [details & fix](docs/bazzite-40cu-runtime-umr.md#️-important-blank-umr_instance-so-the-service-survives-every-boot).
+- **Unstable DRI instance breaks boot persistence** *(fixed upstream — affects versions before
+  [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373))*. Older
+  `write-service-table` baked the current `UMR_INSTANCE` into the boot config, but the DRI number
+  isn't stable across boots (a power-cycle flips `card1`↔`card0`), so the service could silently
+  fail back to 24 CU. Reported as [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)
+  and fixed: `apply-service` now auto-detects the instance each run. On current versions there's
+  nothing to do; on older ones, blank `UMR_INSTANCE` —
+  [details](docs/bazzite-40cu-runtime-umr.md#️-important-blank-umr_instance-so-the-service-survives-every-boot).
 
 ---
 
@@ -120,13 +123,12 @@ See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-li
 - [x] Selective WGP masking guide for scattered-harvest boards
 - [x] Governor tuning notes (safe-point profiles, thermal data)
 - [x] Mutable-distro (kernel patch) quickstart cross-link
-- [x] Report upstream: `write-service-table` bakes a volatile `UMR_INSTANCE` — filed as
+- [x] Report upstream: `write-service-table` baked a volatile `UMR_INSTANCE` — filed as
       [WinnieLV/bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)
-      (follow-up to their #1)
-- [x] Fix implemented + hardware-tested; PR ready (not yet opened) on branch
-      `GonzaloLombardi:fix-unstable-dri-instance` — [draft](upstream/winnielv-pr-fix.md)
+      (follow-up to their #1), **fixed upstream in `ce4e373`** and confirmed across two real
+      power-cycles on hardware. Our PR became redundant (maintainer fixed it directly).
 - [x] Polish: add a LICENSE (CC BY 4.0)
-- [ ] Decide on upstream contributions (PRs to elektricM docs / WinnieLV README)
+- [ ] Optional: contribute a reworded note to elektricM docs (the gotcha is now upstream-fixed)
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
 
 ---

@@ -1,8 +1,11 @@
 # DRAFT PR for WinnieLV/bc250-cu-live-manager (the fix for issue #3)
 
-> **Status: READY, NOT OPENED.** Branch pushed to fork:
-> `GonzaloLombardi:fix-unstable-dri-instance` (commit `5e93804`).
-> Open only when the maintainer asks (or we decide to). Command at the bottom.
+> **Status: SUPERSEDED — do not open.** The maintainer fixed this directly in
+> [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373) (same approach:
+> `apply-service` auto-detects each run, `write-service-table` writes `UMR_INSTANCE=` empty).
+> We confirmed the official fix on two real power-cycles ([issue #3 comment](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3#issuecomment-4650483875)).
+> The fork branch `GonzaloLombardi:fix-unstable-dri-instance` (commit `5e93804`) is kept only
+> for the record. Draft body below is historical.
 
 **Base:** `WinnieLV/bc250-cu-live-manager:main`
 **Head:** `GonzaloLombardi:fix-unstable-dri-instance`

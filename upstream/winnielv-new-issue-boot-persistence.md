@@ -1,8 +1,9 @@
 # DRAFT issue for WinnieLV/bc250-cu-live-manager (option 1b — new issue, references #1)
 
-> **Status: FILED** as https://github.com/WinnieLV/bc250-cu-live-manager/issues/3
-> Verified against `main` script SHA256 `9443d292…0101c` (byte-identical to the tested build).
-> Kept here for the record; the "Notes for us" section below was not part of the filed issue.
+> **Status: FILED & RESOLVED.** https://github.com/WinnieLV/bc250-cu-live-manager/issues/3
+> Fixed upstream in [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373)
+> and confirmed on two real power-cycles. Kept here for the record; the "Notes for us" section
+> below was not part of the filed issue.
 
 ---
 
