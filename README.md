@@ -9,7 +9,9 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 
 > **New here?**
 > - On **Bazzite / Fedora Atomic** → go straight to the **[Bazzite runtime-UMR guide »](docs/bazzite-40cu-runtime-umr.md)**
-> - On a **normal/mutable distro** → use the kernel patch from [duggasco/bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock)
+> - On a **normal/mutable distro** → either the [kernel patch](docs/kernel-patch-mutable-distros.md)
+>   from duggasco (repo **archived** Sept 2026, still usable) or the same runtime-UMR tool, which
+>   now supports apt / pacman / dnf too
 
 ---
 
@@ -19,7 +21,7 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 |---|---|
 | Device | AMD BC-250 — Cyan Skillfish, `gfx1013` (RDNA2) |
 | PCI ID | `1002:13fe` |
-| CUs | **40 total**, 24 enabled stock, 16 harvested (firmware policy, no silicon defect) |
+| CUs | **40 total**, 24 enabled stock, 16 harvested (usually healthy, but not guaranteed: test yours) |
 | Layout | 4 shader arrays (SE0.SH0/SH1, SE1.SH0/SH1) × 5 WGPs × 2 CUs = 40 |
 | Typical gain | ~1.5–1.6× compute throughput (prefill / pp512) |
 
@@ -37,17 +39,23 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 
 | Method | Best for | How it works | Survives kernel update | Reverts by |
 |---|---|---|---|---|
-| **Kernel patch** ([duggasco]) | Mutable distros (build your own kernel) | Patches `amdgpu`, writes regs at driver init; `active_cu_number` becomes 40 | rebuild needed | remove modprobe cfg / restore module |
-| **Runtime UMR** ([WinnieLV]) — **recommended for Bazzite** | Immutable / atomic (Bazzite, Fedora Atomic) | Writes regs from userspace post-boot via `umr`; optional systemd persistence | ✅ yes (no kernel touch) | `stock-dispatch` or reboot |
-| **Prebuilt RPM override** | Bazzite **only if** the build matches your exact kernel | `rpm-ostree override replace` of a patched-kernel RPM set | ❌ pins your kernel | `rpm-ostree rollback` |
+| **Runtime UMR** ([WinnieLV]) — **recommended for Bazzite** | Any distro; the only no-rebuild option on immutable ones (Bazzite, Fedora Atomic, SteamOS*) | Writes regs from userspace post-boot via `umr`; optional systemd persistence | ✅ yes (no kernel touch) | `stock-dispatch` or reboot |
+| **Kernel patch** ([duggasco], ⚠️ archived) | Mutable distros (build your own kernel) | Patches `amdgpu`, writes regs at driver init; `active_cu_number` becomes 40 | rebuild needed | remove modprobe cfg / restore module |
+| **Prebuilt Bazzite image** ([62fixolab], `-40cu` variants, experimental) | Bazzite users happy to rebase to a community image | `rpm-ostree rebase` to an image that tracks Bazzite `stable` and bundles the live manager | ✅ follows image updates | `rpm-ostree rebase` back / rollback |
+| **Prebuilt RPM override** — avoid | Bazzite **only if** the build matches your exact kernel | `rpm-ostree override replace` of a patched-kernel RPM set | ❌ pins your kernel | `rpm-ostree rollback` |
+
+\* SteamOS persistence is still a pending upstream PR
+([bc250-cu-live-manager#7](https://github.com/WinnieLV/bc250-cu-live-manager/pull/7)).
 
 > ⚠️ The prebuilt-RPM route is the common trap: those `.7z` RPM sets are pinned to a
 > specific kernel (e.g. `6.17.7-ba29.fc43`). If `uname -r` doesn't match, the override
-> **downgrades your kernel**. Prefer runtime-UMR on atomic systems. See the
+> **downgrades your kernel**. On atomic systems, prefer runtime-UMR (or a prebuilt image that
+> tracks Bazzite). See the
 > [Bazzite guide](docs/bazzite-40cu-runtime-umr.md#why-not-the-normal-kernel-patch-method-on-bazzite).
 
 [duggasco]: https://github.com/duggasco/bc250-40cu-unlock
 [WinnieLV]: https://github.com/WinnieLV/bc250-cu-live-manager
+[62fixolab]: https://github.com/62fixolab/Latest-Bazzite-AMD-BC-250-Patched-Images
 
 ---
 
@@ -59,13 +67,15 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   revert. Includes the kernel-version pitfall and troubleshooting.
 - 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
   `config.toml` explained, plus a **measured frequency sweep at 40 CU** (1500/1700/1850/2000 MHz →
-  throughput, temp, power), the **1700 MHz efficiency sweet spot**, and a cooling-dependency note.
+  throughput, temp, power), the **1700 MHz efficiency sweet spot**, voltage-curve interpolation,
+  the SMU 80 °C limit, D-Bus frequency pinning, and a cooling-dependency note.
 - 🧩 **[Selective WGP/CU masking](docs/selective-wgp-masking.md)** — for **scattered-harvest or
-  faulty-WGP boards**: `SE.SH.WGP` addressing, `enable-wgp`/`disable-wgp`, the driver-active
-  lock, a bisection workflow to find a bad WGP, and persisting a custom (e.g. 38/40) layout.
+  faulty-WGP boards**: `SE.SH.WGP` addressing, `enable-wgp`/`disable-wgp`, masking stock WGPs
+  live (now allowed upstream), a bisection workflow to find a bad WGP, and persisting a custom
+  (e.g. 38/40) layout.
 - 🛠️ **[Kernel-patch method (mutable distros)](docs/kernel-patch-mutable-distros.md)** — quick
   reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
-  PKGBUILD), with verification and revert. *Not for atomic distros — use runtime-UMR there.*
+  PKGBUILD), with verification and revert. *Upstream archived; not for atomic distros.*
 
 Validate a board quickly:
 - [`scripts/validate-40cu.sh`](scripts/validate-40cu.sh) — checks the SPI/CC registers on all
@@ -77,40 +87,74 @@ Validate a board quickly:
 See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3).
 
 ### Gotchas worth knowing
-- **Unstable DRI instance breaks boot persistence** *(fixed upstream — affects versions before
-  [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373))*. Older
-  `write-service-table` baked the current `UMR_INSTANCE` into the boot config, but the DRI number
-  isn't stable across boots (a power-cycle flips `card1`↔`card0`), so the service could silently
-  fail back to 24 CU. Reported as [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)
-  and fixed: `apply-service` now auto-detects the instance each run. On current versions there's
-  nothing to do; on older ones, blank `UMR_INSTANCE` —
-  [details](docs/bazzite-40cu-runtime-umr.md#️-important-blank-umr_instance-so-the-service-survives-every-boot).
+- **Live-manager installs from before June 2026: update them.** Two things changed upstream:
+  - The boot service could fall back to 24 CU when the DRI instance flipped between boots
+    (`card1` ↔ `card0`). We reported it as [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3),
+    and it's fixed in [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373).
+    [Details](docs/bazzite-40cu-runtime-umr.md#older-builds-stale-umr_instance-breaks-boot-persistence).
+  - [`046e36b`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/046e36b) **removed
+    `enable-cu`/`disable-cu`** (use the `-wgp` commands), allowed live-disabling stock WGPs, and
+    changed the `status` summary to `CUs active & routed : N/40`.
+- **`active_cu_number` stays 24 with runtime-UMR.** That's expected: it's the driver's boot
+  enumeration. The proof that the extra CUs work is the register check plus a compute benchmark
+  (see the scripts above). This comes up a lot, e.g.
+  [bc250-cu-live-manager#9](https://github.com/WinnieLV/bc250-cu-live-manager/issues/9).
 
 ---
 
 ## Reference index
 
 ### Core tools
-- **[duggasco/bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock)** — the
-  original register research, kernel patch, build scripts, whitepaper & technical report.
-  Submitted upstream as CachyOS/kernel-patches#159 (not yet merged).
 - **[WinnieLV/bc250-cu-live-manager](https://github.com/WinnieLV/bc250-cu-live-manager)** —
   runtime-UMR live manager (interactive TUI + CLI + systemd persistence). The tool used by
-  the Bazzite guide here. Builds on gennro's live-unlock test.
+  the Bazzite guide here. Builds on gennro's live-unlock test. Since June 2026 it also has
+  `install-umr` (apt/pacman/paru/rpm-ostree/dnf), Debian support, auto-sudo, and `cpu-unlock`
+  (see below).
+- **[duggasco/bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock)** — the
+  original register research, kernel patch, build scripts, `cu_map.sh`, health test,
+  whitepaper & technical report. **Archived on 17 September 2026** (read-only; still clones).
+  Its upstream submission [CachyOS/kernel-patches#159](https://github.com/CachyOS/kernel-patches/pull/159)
+  is still open and unmerged, with no activity since May 2026.
+- **[62fixolab/Latest-Bazzite-AMD-BC-250-Patched-Images](https://github.com/62fixolab/Latest-Bazzite-AMD-BC-250-Patched-Images)** —
+  Bazzite Deck/GNOME/KDE images for the BC-250 (SMU governor, telemetry fix, signed rebases),
+  plus experimental `-40cu` variants bundling the live manager via `ujust bc250-cu-*`. Not
+  tested by us.
 
 ### Documentation & community
 - **[elektricM/amd-bc250-docs](https://github.com/elektricM/amd-bc250-docs)**
   ([site](https://elektricm.github.io/amd-bc250-docs/)) — the community documentation hub:
-  distro guides, kernel notes, 40CU unlock section, governor setup.
+  distro guides, kernel notes, the [40 CU unlock page](https://elektricm.github.io/amd-bc250-docs/system/40cu-unlock/)
+  (now with a runtime-UMR option and an rpm-ostree/Bazzite section), and governor setup.
+- **[akandr/bc250](https://github.com/akandr/bc250)** — deep dive on LLM inference on this board
+  (Ollama + Vulkan, model benchmarks, GTT/TTM memory tuning). Useful once the unlock is done
+  and your workload is AI.
 
 ### Governor / thermal & clocks
 - **[filippor/cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor)**
-  (SMU branch) — userspace GPU governor to cap/tune frequency & voltage (e.g. 1500 MHz /
-  900 mV) and manage thermals.
+  (SMU branch, v0.4.14 as of Oct 2026) — userspace GPU governor to cap/tune frequency & voltage
+  and manage thermals. Packaged for COPR (Fedora/Bazzite), AUR and `.deb`. Newer versions add
+  linear voltage interpolation, a D-Bus API plus the `cyan-skillfish-performance-mode` helper, and
+  `temp-read`/`fix-freq` options. See our [tuning guide](docs/governor-tuning.md).
+
+### CPU cores (related)
+Not part of the CU unlock, but the same boards, the same tools, and the same thermal budget:
+- **8-core unlock**: WinnieLV's script now has `cpu-unlock` (SMU core mask `0x77` → `0xFF`,
+  6c/12t → 8c/16t). It takes effect on the next reboot, has to be re-run after a cold power
+  cycle, and the extra cores may be unstable. Some boards report a different stock mask
+  ([#10](https://github.com/WinnieLV/bc250-cu-live-manager/issues/10)). The community
+  [8-core page](https://elektricm.github.io/amd-bc250-docs/system/8core-unlock/) covers the
+  firmware route and the ACPI tables.
+- **[bc250-collective/bc250_smu_oc](https://github.com/bc250-collective/bc250_smu_oc)** — CPU
+  overclock/undervolt via the SMU. **Stop the GPU governor while tuning** (they share the SMU),
+  and read its voltage warnings first: the author reports bricking a board. See the
+  [community notes](https://elektricm.github.io/amd-bc250-docs/bios/overclocking/).
 
 ### Benchmark
 - **[ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp)** — prebuilt Vulkan binaries
-  (`llama-bench -p 512`) make a clean A/B compute test for verifying the CU scaling.
+  (`llama-bench -p 512`) make a clean A/B compute test for verifying the CU scaling. Note that
+  builds are now tagged `bNNNN` and marked *pre-release*, so `releases/latest` no longer points
+  at them. The [unlock guide](docs/bazzite-40cu-runtime-umr.md#step-5--verify-it-does-real-work-benchmark)
+  has a working download snippet.
 
 > Have a reference that belongs here (a video, a board harvest-map survey, a patched image)?
 > Open a PR or an issue.
@@ -128,7 +172,12 @@ See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-li
       (follow-up to their #1), **fixed upstream in `ce4e373`** and confirmed across two real
       power-cycles on hardware. Our PR became redundant (maintainer fixed it directly).
 - [x] Polish: add a LICENSE (CC BY 4.0)
-- [ ] Optional: contribute a reworded note to elektricM docs (the gotcha is now upstream-fixed)
+- [x] ~~Contribute a note to elektricM docs~~ — dropped: they added a runtime-UMR option and a
+      Bazzite section themselves (Sept 2026), and the gotcha is fixed upstream
+- [x] Oct 2026 refresh: duggasco archive, live-manager breaking changes, governor v0.4.14,
+      llama.cpp release tags, new references
+- [ ] Re-capture `status` / masking output on hardware with the current live-manager version
+- [ ] Re-check the governor sweep on v0.4.14 (interpolation, SMU 80 °C limit)
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
 
 ---
