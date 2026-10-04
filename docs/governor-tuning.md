@@ -132,9 +132,10 @@ needed).
 How to read it:
 - **Throughput matches June within 1 %** at every point (873/983/1062/1144 then). Four
   months of kernel, Mesa and governor updates changed nothing on the compute side.
-- **PPT is package power (CPU + GPU)**, so it isn't only the GPU. On this board the CPU has no
-  frequency-scaling driver loaded (stock BIOS; see the community notes on the ACPI fix), which
-  keeps the package idling around 47 W.
+- **PPT is package power (CPU + GPU)**, so it isn't only the GPU (loading all CPU threads adds
+  ~34 W). The board idles at ~43 W package with or without the
+  [CPU ACPI fix](cpu-acpi-fix-bazzite.md). The sweep ran before the fix, but the fix changes
+  neither idle power nor GPU-bound results.
 - **`vddgfx` reads below the safe-point voltages** (e.g. 919 mV at 2000 MHz vs a 960 mV
   point). The SMU applies its own offset under load. Judge undervolts by stability, not by
   this readout.
