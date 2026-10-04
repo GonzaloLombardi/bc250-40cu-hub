@@ -170,8 +170,10 @@ Not part of the CU unlock, but the same boards, the same tools, and the same the
   [tested Bazzite page](docs/cpu-acpi-fix-bazzite.md).
 - **8-core unlock**: WinnieLV's script has `cpu-unlock` (SMU core mask `0x77` → `0xFF`,
   6c/12t → 8c/16t). **Tested on our board** ([page](docs/cpu-8core-unlock-bazzite.md)): +31 %
-  multi-thread, verified-correct under `stress-ng --verify`, survives warm reboots but not a cold
-  power cycle. It also breaks GPU frequency *readouts* (monitoring only). Some boards report a
+  multi-thread, verified-correct under `stress-ng --verify`. It survives warm reboots; across cold
+  power cycles, a tested [re-apply service](docs/cpu-8core-unlock-bazzite.md#surviving-cold-boots-a-re-apply-service-that-never-reboots)
+  re-writes the mask without ever rebooting on its own. It also breaks GPU frequency *readouts*
+  (monitoring only). Some boards report a
   different stock mask ([#10](https://github.com/WinnieLV/bc250-cu-live-manager/issues/10)). The
   community [8-core page](https://elektricm.github.io/amd-bc250-docs/system/8core-unlock/) covers
   the firmware route.
