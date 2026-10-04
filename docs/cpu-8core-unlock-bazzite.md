@@ -158,6 +158,7 @@ login. Three small pieces:
      "BC-250: 8 núcleos listos para activar" \
      "La CPU arrancó con $(nproc --all) hilos después de un apagado completo. La máscara de 8 núcleos ya está aplicada: reiniciá para activarlos.")
    [ "$ans" = reboot ] && exec systemctl reboot
+   exit 0
    ```
    ```ini
    # /etc/xdg/autostart/bc250-cpu-unlock-notify.desktop
