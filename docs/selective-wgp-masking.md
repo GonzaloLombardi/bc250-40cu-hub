@@ -5,6 +5,11 @@ row). Some boards have **scattered** disabled units, and some have a genuinely *
 that crashes the GPU when routed. For those, you don't enable all 40 — you enable the **good**
 WGPs and mask the bad ones, landing somewhere like 36 or 38 CUs that's stable.
 
+The harvest map is only a hint. Community reports
+([elektricM/amd-bc250-docs#57](https://github.com/elektricM/amd-bc250-docs/issues/57)) include
+contiguous boards with bad CUs and scattered boards that run all 40 cleanly. So whatever your
+map looks like, stress-test after unlocking. The bisection workflow below works for any board.
+
 This uses the same runtime-UMR tool as the [main unlock guide](bazzite-40cu-runtime-umr.md):
 [`WinnieLV/bc250-cu-live-manager`](https://github.com/WinnieLV/bc250-cu-live-manager).
 
@@ -12,7 +17,7 @@ This uses the same runtime-UMR tool as the [main unlock guide](bazzite-40cu-runt
 
 ---
 
-## Addressing: SE.SH.WGP (and CU ids)
+## Addressing: SE.SH.WGP
 
 The GPU is 4 shader-array rows × 5 WGPs × 2 CUs:
 
@@ -24,8 +29,10 @@ The GPU is 4 shader-array rows × 5 WGPs × 2 CUs:
 | SE1.SH1 | `1.1` | … | | | | |
 
 - **WGP is the unit of control** — one WGP = two CUs; you can't toggle a single CU.
-- `disable-wgp 1.0.4` = SE1, SH0, WGP4.
-- `disable-cu 1.0.8` = the WGP that owns CU8 → WGP4 (`cu / 2`). Same effect as above.
+- `disable-wgp 1.0.4` = SE1, SH0, WGP4 (CU8–9). To go from a CU id to its WGP, divide by 2.
+- The `enable-cu` / `disable-cu` aliases were **removed** upstream in
+  [`046e36b`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/046e36b) (June 2026).
+  Use the WGP commands.
 - The per-row SPI mask is a 5-bit value: `0x1f` = all 5 WGPs on, `0x0f` = WGP4 off,
   `0x07` = stock (WGP0–2 only), etc.
 
@@ -40,13 +47,15 @@ sudo ~/bc250-cu-live-manager.sh status
 A **scattered** board looks like this (note the gaps aren't all at the end):
 
 ```
-| SE0.SH0 |  D+  |  D+  |  D+  |  --  |  --  |
-| SE0.SH1 |  D+  |  --  |  D+  |  --  |  S+  |   <- non-contiguous
-| SE1.SH0 |  D+  |  D+  |  D+  |  --  |  --  |
-| SE1.SH1 |  D+  |  D+  |  D+  |  --  |  --  |
+  | SE0.SH0 |  D+  |  D+  |  D+  |  --  |  --  |
+  | SE0.SH1 |  D+  |  --  |  D+  |  --  |  S+  |   <- non-contiguous
+  | SE1.SH0 |  D+  |  D+  |  D+  |  --  |  --  |
+  | SE1.SH1 |  D+  |  D+  |  D+  |  --  |  --  |
 ```
 
-`D+` = driver-active (locked), `S+` = SPI-routed by you, `--` = off.
+Legend (current versions): `D+` = in the driver's boot topology and routed, `S+` = routed via
+SPI by you (not in the driver topology), `D!` = in the driver topology but switched off by
+you, `--` = off.
 
 ---
 
@@ -57,18 +66,17 @@ A **scattered** board looks like this (note the gaps aren't all at the end):
 sudo ~/bc250-cu-live-manager.sh enable-wgp 0.1.3 1.1.3
 sudo ~/bc250-cu-live-manager.sh disable-wgp 1.0.4
 
-# By CU id (mapped to its WGP)
-sudo ~/bc250-cu-live-manager.sh disable-cu 1.0.8        # CU8 -> WGP4
-
 # Whole-board presets
 sudo ~/bc250-cu-live-manager.sh enable all              # all 40
 sudo ~/bc250-cu-live-manager.sh stock-dispatch          # back to 24 (driver topology)
+sudo ~/bc250-cu-live-manager.sh disable all             # turn off every dispatch WGP
 
 # Interactive editor (arrows/hjkl move, Space toggles, Enter applies)
 sudo ~/bc250-cu-live-manager.sh table
 ```
 
-Always preview with `--dry-run` first. Real output of disabling one harvested WGP:
+Always preview with `--dry-run` first. Real output of disabling one harvested WGP (captured on
+a June 2026 build; exact wording may differ on newer versions):
 
 ```text
 $ sudo ./bc250-cu-live-manager.sh disable-wgp 1.0.4 --dry-run
@@ -83,19 +91,24 @@ So that one change lands the board at **38/40 CUs**, with WGP4 of SE1.SH0 masked
 
 ---
 
-## Safety: driver-active WGPs can't be live-disabled
+## Driver-active (stock) WGPs
 
-The 24 stock CUs (WGP0–2) are **active in the driver topology** and the tool refuses to turn
-them off at runtime (disabling a CU the driver is using mid-flight would crash it):
+The 24 stock CUs (WGP0–2) are **in the driver's boot topology**. Older versions of the tool
+refused to touch them at runtime (`refusing to disable SE0 SH0 WGP0; it is active in driver
+topology`). **That lock was removed** in
+[`046e36b`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/046e36b): live routing can
+now disable any WGP pair, stock ones included, and the dashboard shows them as `D!`.
 
-```text
-$ sudo ./bc250-cu-live-manager.sh disable-wgp 0.0.0 --dry-run
-[ERR ] refusing to disable SE0 SH0 WGP0; it is active in driver topology
-```
+What that means in practice:
 
-You can only live-toggle the **harvested** WGPs (3–4). To change which of the *stock* CUs are
-active you'd need the kernel-patch path with a boot-time driver mask (see
-[duggasco](https://github.com/duggasco/bc250-40cu-unlock)'s `disable_cu=` modparam).
+- The only change is SPI dispatch: the driver still believes those CUs exist
+  (`active_cu_number` doesn't change). That makes this a way to **stop sending work to a stock
+  WGP you suspect is faulty**, without a reboot.
+- We haven't tested disabling stock WGPs on hardware. Use `--dry-run` first, keep a remote
+  shell, and stress-test afterwards just like with the harvested ones.
+- For a boot-time mask the driver itself respects, the kernel-patch path still has the
+  `disable_cu=` modparam (see [duggasco](https://github.com/duggasco/bc250-40cu-unlock), now
+  archived).
 
 ---
 
@@ -110,7 +123,10 @@ If `enable all` is unstable on your board:
 3. When a specific row/WGP triggers the crash, leave that one masked and enable the rest.
    Typical stable landing points are 36 or 38 CUs.
 4. duggasco also ships a per-WGP **health test** (`bc250-cu-health-test.sh` + `bc250-cu-mask.sh`)
-   that automates this on the kernel-patch path — useful as a cross-reference.
+   that automates this on the kernel-patch path — useful as a cross-reference. The repo is
+   archived but still clones.
+5. If the crash persists with every harvested WGP masked, the culprit may be a **stock** WGP.
+   Current versions let you mask those live too (see above).
 
 ---
 
@@ -124,10 +140,12 @@ sudo ~/bc250-cu-live-manager.sh write-service-table --yes
 sudo ~/bc250-cu-live-manager.sh install-service --yes
 ```
 
-> ⚠️ Then **blank `UMR_INSTANCE`** so the boot service survives DRI renumbering — same fix as
-> the full unlock: see
-> [that note](bazzite-40cu-runtime-umr.md#️-important-blank-umr_instance-so-the-service-survives-every-boot).
-> The saved profile stores your exact per-row masks (e.g. `0x1f,0x1f,0x0f,0x1f`), not just
-> "all on", so a masked layout persists correctly.
+The saved profile stores your exact per-row masks (e.g. `0x1f,0x1f,0x0f,0x1f`), not just
+"all on", so a masked layout persists correctly. Re-run `write-service-table` after any table
+change. `status` tells you when the saved boot table is out of date.
+
+> On installs from before June 2026 the boot service can break when the DRI instance changes
+> between boots. Update the script; see
+> [the note in the unlock guide](bazzite-40cu-runtime-umr.md#older-builds-stale-umr_instance-breaks-boot-persistence).
 
 Revert anytime with `stock-dispatch` (live) or `uninstall-service` + reboot (permanent).

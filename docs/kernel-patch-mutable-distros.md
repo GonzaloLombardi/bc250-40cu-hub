@@ -9,6 +9,15 @@ it writes the unlock registers at driver init, so `active_cu_number` actually be
 > install fights the read-only OS. Use the [runtime-UMR guide](bazzite-40cu-runtime-umr.md)
 > instead. This page is only for mutable systems.
 
+> ⚠️ **The upstream repo is archived (17 September 2026).** It still clones and the patch,
+> scripts and reports are all there, but it's read-only: if a future kernel breaks the patch
+> or the build scripts, nobody will fix it there. Known open breakages at archive time include
+> the Debian 13 / kernel 6.12 build
+> ([#19](https://github.com/duggasco/bc250-40cu-unlock/issues/19)) and Debian source detection
+> ([#7](https://github.com/duggasco/bc250-40cu-unlock/issues/7)). Check the issue tracker and
+> the forks before you rely on it. The runtime-UMR route works on mutable distros too
+> (WinnieLV's script supports apt, pacman/paru and dnf) and doesn't depend on this repo.
+
 ---
 
 ## When to choose this over runtime-UMR
@@ -20,8 +29,10 @@ it writes the unlock registers at driver init, so `active_cu_number` actually be
 | Survives kernel updates | ❌ rebuild per kernel | ✅ |
 | Applied at | driver init | post-boot (systemd) |
 
-On mutable distros either works; the kernel patch is the "cleaner" integration, runtime-UMR
-is the lower-maintenance one.
+| Upstream maintained | ❌ archived Sept 2026 | ✅ active |
+
+On mutable distros either works. The kernel patch is the "cleaner" integration; runtime-UMR
+is the lower-maintenance one, and since the archive it's also the only one still maintained.
 
 ---
 
@@ -32,8 +43,9 @@ git clone https://github.com/duggasco/bc250-40cu-unlock.git
 cd bc250-40cu-unlock
 sudo ./scripts/bc250-enable-40cu.sh build     # patch + compile amdgpu, backs up original
 sudo ./scripts/bc250-enable-40cu.sh enable    # writes modprobe cfg, reboots
-# Fedora (non-atomic) has a dedicated variant:
-#   sudo ./scripts/bc250-enable-40cu-fedora.sh build && ... enable
+# Distro-specific variants for kernel 7.x:
+#   sudo ./scripts/bc250-enable-40cu-fedora.sh build && ... enable   # Fedora (non-atomic, F44)
+#   sudo ./scripts/bc250-enable-40cu-arch.sh   build && ... enable   # Arch
 ```
 
 Requires `gcc`, `make`, `zstd`, `curl`, and matching `kernel-headers`/`kernel-devel`.
@@ -57,7 +69,9 @@ sudo reboot
 
 Add `patch/bc250-40cu-amdgpu.patch` to your kernel PKGBUILD's patch array, rebuild the kernel
 package, then add the `modprobe.d` option from Method B. (The patch was submitted upstream as
-CachyOS/kernel-patches#159; not yet merged.)
+[CachyOS/kernel-patches#159](https://github.com/CachyOS/kernel-patches/pull/159). It's still
+open and unmerged, with no activity since May 2026, and with the source repo archived it's
+unlikely to move.)
 
 ---
 
@@ -99,4 +113,5 @@ sudo ./scripts/bc250-enable-40cu.sh restore    # restore original amdgpu module
 
 *All credit for the patch, scripts, and register research:
 [duggasco/bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock). This page is a
-summary/cross-link, not a replacement — check the upstream repo for the latest.*
+summary/cross-link, not a replacement. The repo is archived, so for fixes on newer kernels
+check its open issues/PRs and the [community docs](https://elektricm.github.io/amd-bc250-docs/).*

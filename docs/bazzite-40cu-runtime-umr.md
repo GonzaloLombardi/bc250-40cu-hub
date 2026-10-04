@@ -32,9 +32,21 @@ mutable distros, but on **Bazzite / Fedora Atomic** it fights the OS design:
 > running image**. Check `uname -r` first. If it doesn't match, **don't** — use the
 > runtime-UMR method below instead.
 
-The community docs ([elektricM/amd-bc250-docs](https://elektricm.github.io/amd-bc250-docs/))
-explicitly recommend the runtime-UMR approach for immutable systems. This guide is the
-concrete, tested walkthrough.
+> **Note:** duggasco archived `bc250-40cu-unlock` on 17 September 2026. It still clones, but
+> nothing in it will be fixed for later kernels. The runtime-UMR route below doesn't depend on it.
+
+The community docs ([elektricM/amd-bc250-docs](https://elektricm.github.io/amd-bc250-docs/system/40cu-unlock/))
+recommend the runtime-UMR approach for rpm-ostree systems. This guide is the concrete,
+tested walkthrough.
+
+**The other working option on Bazzite: rebase to a prebuilt image.**
+[62fixolab/Latest-Bazzite-AMD-BC-250-Patched-Images](https://github.com/62fixolab/Latest-Bazzite-AMD-BC-250-Patched-Images)
+builds Deck / GNOME / KDE images on the official Bazzite `stable` base, with the SMU governor
+preinstalled, plus `-40cu` variants that bundle the live manager behind `ujust bc250-cu-*`
+commands. Unlike the `.7z` RPM sets, these track Bazzite updates. Their README calls the
+`-40cu` images **experimental**, and Bazzite doesn't support rebasing between desktop variants,
+so stay on the variant you already run. We haven't tested them. This guide sticks to layering
+`umr` on the stock image.
 
 ---
 
@@ -99,6 +111,10 @@ After reboot, verify:
 command -v umr && umr --version 2>/dev/null; rpm -q umr
 ```
 
+> Alternative: once you have the script (Step 2), `sudo ~/bc250-cu-live-manager.sh install-umr`
+> does the same layering for you (it detects rpm-ostree, stages `umr`, and asks you to reboot).
+> It also handles apt (building from source on Debian), pacman/paru and dnf.
+
 ## Step 2 — Get the live manager (verified)
 
 ```bash
@@ -108,8 +124,13 @@ chmod +x ~/bc250-cu-live-manager.sh
 ```
 
 > The script is plain Bash, gated on PCI `13fe`, refuses writes on other hardware, supports
-> `--dry-run`, and only touches the three documented registers. Read it before running with
-> root — that's good hygiene for anything that writes GPU registers.
+> `--dry-run`, and only touches the three documented registers for CU routing. Read it before
+> running with root — that's good hygiene for anything that writes GPU registers.
+>
+> Current versions re-launch themselves with `sudo` when a command needs root. The examples
+> here keep `sudo` explicit anyway. Since mid-2026 the script also has a separate
+> `cpu-unlock` command (6c/12t → 8c/16t via the SMU) that this guide doesn't cover; see the
+> [hub README](../README.md#cpu-cores-related).
 
 ## Step 3 — Read your harvest map (read-only)
 
@@ -120,17 +141,26 @@ sudo ~/bc250-cu-live-manager.sh status
 Look at the table. The **lucky / contiguous** case looks like this (WGP3–4 off on every row):
 
 ```
-| SE0.SH0 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
-| SE0.SH1 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
-| SE1.SH0 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
-| SE1.SH1 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
-  SPI total  : 24/40 CUs
+  Legend     : D+ driver+routed, S+ SPI+routed, D! driver+off, -- off
+
+  | SE0.SH0 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
+  | SE0.SH1 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
+  | SE1.SH0 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
+  | SE1.SH1 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
+
+  CUs active & routed  : 24/40
 ```
 
-- **Contiguous (as above):** safe to `enable all`.
-- **Scattered** (disabled WGPs interspersed): some boards have genuinely defective units.
-  Enabling everything risks crashes — use **selective WGP masking** (`enable-wgp` /
+(Older versions printed `SPI total : 24/40 CUs` instead of the last line.)
+
+- **Contiguous (as above):** the common case. `enable all` is the normal next step.
+- **Scattered** (disabled WGPs interspersed): use **selective WGP masking** (`enable-wgp` /
   `disable-wgp`, or the `table` editor) and test row by row.
+
+Treat the map as a hint, not a verdict. Community reports
+([elektricM/amd-bc250-docs#57](https://github.com/elektricM/amd-bc250-docs/issues/57)) include
+contiguous boards with bad CUs and scattered boards that run all 40. Whatever yours shows,
+stress-test after unlocking (see [selective masking](selective-wgp-masking.md#finding-the-bad-wgp-bisection-workflow)).
 
 ## Step 4 — Preview, then apply
 
@@ -141,16 +171,17 @@ sudo ~/bc250-cu-live-manager.sh enable all --dry-run
 # Apply for real (live; reverts on reboot until you persist it)
 sudo ~/bc250-cu-live-manager.sh enable all --yes
 
-# Verify: every row should now be 0x1f / 0xffe00000, SPI total 40/40
+# Verify: every row should now be 0x1f / 0xffe00000, 40/40 routed
 sudo ~/bc250-cu-live-manager.sh status
 ```
 
 Expected after unlock:
 
 ```
-| SE0.SH0 |  D+  |  D+  |  D+  |  S+  |  S+  | 0x1f | 0xffe00000 |  10/10 |
-... (×4 rows)
-  SPI total  : 40/40 CUs
+  | SE0.SH0 |  D+  |  D+  |  D+  |  S+  |  S+  | 0x1f | 0xffe00000 |  10/10 |
+  ... (×4 rows)
+
+  CUs active & routed  : 40/40
 ```
 
 (`S+` = the formerly-harvested WGPs, now routed via SPI.)
@@ -161,9 +192,10 @@ Expected after unlock:
 prebuilt `llama.cpp` Vulkan binary runs on the host's RADV with no container or reboot:
 
 ```bash
-# Get the prebuilt Vulkan binary (the tag is resolved to the latest release)
+# Get the prebuilt Vulkan binary (resolves the newest bNNNN build tag)
 mkdir -p ~/llamabench && cd ~/llamabench
-TAG=$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/releases/latest | grep -oE '"tag_name": "[^"]*"' | head -1 | cut -d'"' -f4)
+TAG=$(curl -fsSL "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10" | grep -oE '"tag_name": "b[0-9]+"' | head -1 | cut -d'"' -f4)
+echo "llama.cpp build: $TAG"
 curl -fsSL -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/$TAG/llama-$TAG-bin-ubuntu-vulkan-x64.tar.gz"
 tar xzf llama.tar.gz
 BIN=$(find . -name llama-bench | head -1); LIB=$(dirname "$BIN")
@@ -213,32 +245,26 @@ The service writes the saved mask at every boot. Config lives in
 (→ `/var/usrlocal/bin` on Bazzite). Reboot once and re-check `status` to confirm 40/40 is
 reapplied automatically.
 
-> ### ⚠️ Important: blank `UMR_INSTANCE` so the service survives every boot
+> ### Older builds: stale UMR_INSTANCE breaks boot persistence
 >
-> **Fixed upstream in [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373)**
-> (reported as [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)). On current
-> versions `apply-service` auto-detects the instance each run, so there's nothing to do — this
-> section applies only to **older builds**. For reference, the original problem:
+> **Only affects installs from before 7 June 2026** (fixed upstream in
+> [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373), reported as
+> [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)). Current versions write
+> `UMR_INSTANCE=` empty and `apply-service` auto-detects the DRI instance on every boot, so
+> there's nothing to do.
 >
-> `write-service-table` bakes the **current** umr DRI instance into the config
-> (e.g. `UMR_INSTANCE=1`). But the DRI instance number is **not stable across boots** —
-> the same board can enumerate as `/dev/dri/card1` (instance 1) on one boot and `card0`
-> (instance 0) on the next (notably after a full power-cycle). When that happens, the boot
-> service runs `umr -i <wrong>` and fails with:
-> ```
-> [ERR ] failed to read cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK with umr
-> ```
-> leaving you silently back at 24 CU. **Fix:** blank the baked instance so the script
-> auto-detects the right one each boot (it matches the BC-250 BDF in
-> `/sys/kernel/debug/dri/`, which it can read as the root service):
+> On older builds, `write-service-table` baked the current instance (e.g. `UMR_INSTANCE=1`)
+> into the config. The DRI number isn't stable across boots (a power-cycle can flip
+> `card1` ↔ `card0`), so the service then failed with
+> `failed to read cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK with umr` and left
+> you at 24 CU. **The real fix is to update:** re-download the script (Step 2) and re-run
+> `install-service --yes`, which replaces the copy in `/usr/local/bin`. If you can't update,
+> blank the baked value after every `write-service-table`:
 > ```bash
 > sudo sed -i 's/^UMR_INSTANCE=.*/UMR_INSTANCE=/' /etc/bc250-cu-live-manager.conf
 > sudo systemctl restart bc250-cu-live-manager.service
 > sudo ~/bc250-cu-live-manager.sh status   # UMR inst should now read "N (auto)"
 > ```
-> Do this **after** every `write-service-table` (it re-bakes the instance each time).
-> Verified: with `UMR_INSTANCE=` empty, the service correctly applied 40/40 across boots
-> that enumerated the GPU as instance 0 *and* instance 1.
 
 ---
 
@@ -266,11 +292,14 @@ A plain reboot **without** the service installed always returns to stock 24 CU.
   nodes, so a missing `umr` means the unlock silently doesn't apply (it won't break boot).
 - **`failed to read … with umr` / wrong instance** — pass `-i N` (`--umr-instance`). The
   script auto-detects via `/sys/kernel/debug/dri`, but multi-GPU hosts may need it explicit.
-- **Boot service fails / drops back to 24 CU after a (cold) boot** — the saved
-  `UMR_INSTANCE` no longer matches because DRI numbering changed between boots. Blank it so
-  the service auto-detects each boot — see the ⚠️ box in [Step 6](#step-6--persist-across-reboots-optional).
-  Quick check: `journalctl -u bc250-cu-live-manager.service -b` showing
-  `failed to read … with umr` + `systemctl is-active …` = `failed`.
+- **Boot service fails / drops back to 24 CU after a (cold) boot** — check
+  `journalctl -u bc250-cu-live-manager.service -b`. If it shows `failed to read … with umr`
+  and the install is from before June 2026, it's the stale-`UMR_INSTANCE` bug: update the
+  script, see [the note in Step 6](#older-builds-stale-umr_instance-breaks-boot-persistence).
+- **`failed to read … with umr` right after a system update (Arch/CachyOS)** — the AUR `umr`
+  package needs `llvm` at runtime but doesn't declare it. Install `llvm`
+  ([bc250-cu-live-manager#11](https://github.com/WinnieLV/bc250-cu-live-manager/issues/11)).
+  Doesn't apply to the Fedora `umr` package used here.
 - **Crash / freeze right after `enable all`** — likely a board with genuinely defective
   (scattered) WGPs. Reboot to recover, then enable WGPs incrementally and test.
 - **No throughput gain** — make sure the workload is GPU/compute-bound and fully offloaded
@@ -282,7 +311,7 @@ A plain reboot **without** the service installed always returns to stock 24 CU.
 
 ## Credits
 
-- Register research & kernel patch: [duggasco/bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock)
+- Register research & kernel patch: [duggasco/bc250-40cu-unlock](https://github.com/duggasco/bc250-40cu-unlock) (archived Sept 2026)
 - Runtime-UMR live manager: [WinnieLV/bc250-cu-live-manager](https://github.com/WinnieLV/bc250-cu-live-manager)
   (builds on gennro's live-unlock test)
 - Community docs hub: [elektricM/amd-bc250-docs](https://github.com/elektricM/amd-bc250-docs)
