@@ -80,6 +80,14 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 - 🛠️ **[Kernel-patch method (mutable distros)](docs/kernel-patch-mutable-distros.md)** — quick
   reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
   PKGBUILD), with verification and revert. *Upstream archived; not for atomic distros.*
+- 🧠 **[8-core CPU unlock on Bazzite](docs/cpu-8core-unlock-bazzite.md)** — runtime SMU unlock
+  (no BIOS flash), tested: +31 % multi-thread (7-Zip), correctness-verified, 16-thread ACPI tables,
+  and a CPU+GPU combined test where a 2550 MHz CPU cap cuts the CPU peak from 94 °C to 79 °C with
+  no GPU loss.
+- 🌡️ **[CPU frequency scaling & idle states on Bazzite (ACPI fix)](docs/cpu-acpi-fix-bazzite.md)** —
+  the community SSDT override via rpm-ostree, tested: `acpi-cpufreq` + C1–C3 come up, the 40 CU
+  unlock is unaffected, and measurements show **no idle saving** but a new **CPU heat knob**: a
+  2550 MHz cap takes a full-CPU load from 91 °C / 76 W to 65 °C / 53 W.
 
 Validate a board quickly:
 - [`scripts/validate-40cu.sh`](scripts/validate-40cu.sh) — checks the SPI/CC registers on all
@@ -158,12 +166,15 @@ rpm-ostree, governor wrapper not unpinning).
 
 ### CPU cores (related)
 Not part of the CU unlock, but the same boards, the same tools, and the same thermal budget:
-- **8-core unlock**: WinnieLV's script now has `cpu-unlock` (SMU core mask `0x77` → `0xFF`,
-  6c/12t → 8c/16t). It takes effect on the next reboot, has to be re-run after a cold power
-  cycle, and the extra cores may be unstable. Some boards report a different stock mask
-  ([#10](https://github.com/WinnieLV/bc250-cu-live-manager/issues/10)). The community
-  [8-core page](https://elektricm.github.io/amd-bc250-docs/system/8core-unlock/) covers the
-  firmware route and the ACPI tables.
+- **CPU P-states / C-states**: the stock BIOS exposes none. The ACPI fix adds them; see our
+  [tested Bazzite page](docs/cpu-acpi-fix-bazzite.md).
+- **8-core unlock**: WinnieLV's script has `cpu-unlock` (SMU core mask `0x77` → `0xFF`,
+  6c/12t → 8c/16t). **Tested on our board** ([page](docs/cpu-8core-unlock-bazzite.md)): +31 %
+  multi-thread, verified-correct under `stress-ng --verify`, survives warm reboots but not a cold
+  power cycle. It also breaks GPU frequency *readouts* (monitoring only). Some boards report a
+  different stock mask ([#10](https://github.com/WinnieLV/bc250-cu-live-manager/issues/10)). The
+  community [8-core page](https://elektricm.github.io/amd-bc250-docs/system/8core-unlock/) covers
+  the firmware route.
 - **[bc250-collective/bc250_smu_oc](https://github.com/bc250-collective/bc250_smu_oc)** — CPU
   overclock/undervolt via the SMU. **Stop the GPU governor while tuning** (they share the SMU),
   and read its voltage warnings first: the author reports bricking a board. See the
@@ -202,9 +213,8 @@ Not part of the CU unlock, but the same boards, the same tools, and the same the
 - [x] Undervolt correctness test on the test board (Oct 2026): no usable margin, stock kept
 - [ ] File the two upstream drafts in [`upstream/`](upstream/) (live-manager `install-umr`,
       governor wrapper)
-- [ ] Try the CPU ACPI fix ([bc250-acpi-fix](https://github.com/bc250-collective/bc250-acpi-fix),
-      C/P-states) on the test board. The CPU has no cpufreq/cpuidle today and idles at ~43 W
-      package, so this is the main software lever left for heat
+- [x] CPU ACPI fix (C/P-states) applied and measured on the test board (Oct 2026). No idle
+      saving; it enables CPU frequency caps ([page](docs/cpu-acpi-fix-bazzite.md))
 - [ ] Re-run the sweep if the test board's airflow changes (it's cooled by an external fan;
       idle temps were high in Oct 2026)
 - [ ] Optional: a tested Arch / Omarchy page (runtime-UMR with `umr` from AUR)
