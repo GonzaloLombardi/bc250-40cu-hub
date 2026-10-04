@@ -117,6 +117,12 @@ command -v umr && umr --version 2>/dev/null; rpm -q umr
 > Alternative: once you have the script (Step 2), `sudo ~/bc250-cu-live-manager.sh install-umr`
 > does the same layering for you (it detects rpm-ostree, stages `umr`, and asks you to reboot).
 > It also handles apt (building from source on Debian), pacman/paru and dnf.
+>
+> ⚠️ **Only run it if `umr` isn't installed yet.** Its "already installed" check only looks at
+> dpkg and pacman, so on Bazzite with `umr` already layered it calls `rpm-ostree install umr`
+> again and fails with `[ERR ] rpm-ostree could not install umr` (rpm-ostree:
+> `Package/capability 'umr' is already requested`). Nothing is changed, so it's harmless, but
+> misleading. Check with `rpm -q umr` instead. (Tested on `a929085`, Oct 2026.)
 
 ## Step 2 — Get the live manager (verified)
 
@@ -288,7 +294,8 @@ reapplied automatically.
 > [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373), reported as
 > [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)). Current versions write
 > `UMR_INSTANCE=` empty and `apply-service` auto-detects the DRI instance on every boot, so
-> there's nothing to do.
+> there's nothing to do. (Re-confirmed Oct 2026 on `a929085`: across four reboots the board
+> came up as instance 1 and then as instance 0, and the service applied 40/40 every time.)
 >
 > On older builds, `write-service-table` baked the current instance (e.g. `UMR_INSTANCE=1`)
 > into the config. The DRI number isn't stable across boots (a power-cycle can flip
@@ -319,6 +326,11 @@ sudo rpm-ostree uninstall umr && sudo systemctl reboot
 ```
 
 A plain reboot **without** the service installed always returns to stock 24 CU.
+
+`uninstall-service` removes the unit, the copy in `/usr/local/bin` **and the saved boot table**
+(`/etc/bc250-cu-live-manager.conf`). To persist again later, re-run `write-service-table`
+before (or after) `install-service`. (Full revert cycle tested Oct 2026: uninstall → reboot →
+24/40 with CC back to `0xfff80000` → reinstall → 40/40.)
 
 ---
 

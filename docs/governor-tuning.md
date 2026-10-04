@@ -94,8 +94,10 @@ Key ideas:
   rejected.
 - **`frequency-range.max`** is your real ceiling. Raising it lets the governor climb further
   up the curve under load. The range is clamped to the span of the safe-points. **Don't set
-  `max = 0`** expecting "no limit": it gets clamped up to the lowest safe point and pins the GPU
-  there (500 MHz with the shipped curve). Omit the key instead.
+  `max = 0`** expecting "no limit" (the shipped file's own comment still says you can): it gets
+  clamped up to the lowest safe point and pins the GPU there. Tested on v0.4.14: the log shows an
+  inverted `initial frequency range: 1000..=500`, the clock stays at **500 MHz even under load**,
+  and pp512 drops from 1072 to **305 tok/s**. Omit the key instead.
 - **`temperature.throttling`** is the governor's safety net. Leave it on (85 °C is sane) even
   while experimenting. Until the governor *service* is enabled, any crash reboots to stock clocks.
 - **There's a second, lower limit:** with `set-method = "smu"` the governor also sets the SMU's
@@ -195,14 +197,22 @@ throttling stays active, and no config edit or restart is needed:
 cyan-skillfish-performance-mode --fixed-frequency 1700   # pin
 cyan-skillfish-performance-mode --status
 cyan-skillfish-performance-mode --off                    # back to adaptive
-
-# or wrap just the benchmark (auto-reverts when it exits):
-cyan-skillfish-performance-mode --fixed-frequency 1700 -- llama-bench …
 ```
 
-(The raw equivalent is `busctl --system call com.cyanskillfish.Governor /com/cyanskillfish/Governor com.cyanskillfish.Governor.PerformanceMode SetFixedFrequency u 1700`.)
+The raw equivalents (tested) are
+`busctl --system call com.cyanskillfish.Governor /com/cyanskillfish/Governor com.cyanskillfish.Governor.PerformanceMode SetFixedFrequency u 1700`
+and, to turn it off,
+`busctl --system set-property com.cyanskillfish.Governor /com/cyanskillfish/Governor com.cyanskillfish.Governor.PerformanceMode Enabled b false`.
 
-**Config-file method** (how the sweep below was measured; works on any version): set
+> ⚠️ **Wrapper mode doesn't clean up (v0.4.14).** Upstream documents
+> `cyan-skillfish-performance-mode --fixed-frequency 1700 -- some-command` as "enable, run,
+> disable on exit", but the script sets `trap cleanup EXIT` and then `exec`s the command, and
+> `exec` replaces the shell, so the trap never runs. On our board the clock **stayed pinned**
+> after the wrapped command exited, with or without `--`, whether it succeeded or failed. If
+> you use the wrapper (e.g. as a Steam launch option), run `--off` afterwards, or a pinned
+> clock will keep the GPU hot at idle.
+
+**Config-file method** (how the June sweep was measured; works on any version): set
 `min = max`:
 
 ```bash

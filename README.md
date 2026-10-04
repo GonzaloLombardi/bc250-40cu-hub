@@ -100,6 +100,13 @@ See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-li
   - [`046e36b`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/046e36b) **removed
     `enable-cu`/`disable-cu`** (use the `-wgp` commands), allowed live-disabling stock WGPs, and
     changed the `status` summary to `CUs active & routed : N/40`.
+- **Two upstream bugs found while re-testing (Oct 2026), both harmless once you know:**
+  `install-umr` errors out on Bazzite when `umr` is already layered (it only checks dpkg and
+  pacman; [details](docs/bazzite-40cu-runtime-umr.md#step-1--install-umr-one-reboot)), and the
+  governor's `cyan-skillfish-performance-mode … -- command` wrapper **doesn't unpin the clock**
+  when the command exits (`exec` skips its cleanup trap;
+  [details](docs/governor-tuning.md#how-to-pin-a-frequency-for-benchmarking)). Run `--off`
+  afterwards.
 - **`active_cu_number` stays 24 with runtime-UMR.** That's expected: it's the driver's boot
   enumeration. The proof that the extra CUs work is the register check plus a compute benchmark
   (see the scripts above). This comes up a lot, e.g.
