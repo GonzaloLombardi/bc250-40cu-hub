@@ -69,8 +69,10 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 - 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
   `config.toml` explained, plus a **measured frequency sweep at 40 CU on v0.4.14**
   (1500/1700/1850/2000 MHz → throughput, voltage, temp, package power, tok/s per W), the
-  **1700 MHz efficiency sweet spot**, voltage-curve interpolation, D-Bus frequency pinning, and
-  a real before/after showing how much airflow changes temps (73 °C vs 91 °C at the same clock).
+  **1700 MHz efficiency sweet spot**, voltage-curve interpolation, D-Bus frequency pinning,
+  a real before/after showing how much airflow changes temps (73 °C vs 91 °C at the same clock),
+  and an **undervolt test that caught silent miscompute** (wrong output, no crash) just 40 mV
+  below stock.
 - 🧩 **[Selective WGP/CU masking](docs/selective-wgp-masking.md)** — for **scattered-harvest or
   faulty-WGP boards**: `SE.SH.WGP` addressing, `enable-wgp`/`disable-wgp`, masking stock WGPs
   live (tested), **what masking costs** (the slowest shader array sets the pace: 38 CU ≈ 90 %,
@@ -88,8 +90,14 @@ Validate a board quickly:
 - [`scripts/sweep-clocks.sh`](scripts/sweep-clocks.sh) — **clock sweep**: pins 1500–2000 MHz via
   the governor's D-Bus helper and logs pp512, sclk, vddgfx, temp and power *under load*. This is
   the method behind the governor table. `./sweep-clocks.sh` (no root needed).
+- [`scripts/undervolt-test.sh`](scripts/undervolt-test.sh) — **undervolt correctness test**:
+  steps a clock's voltage down through the governor's TestMode and stops at the first step whose
+  deterministic llama.cpp output differs from stock. It catches errors that benchmarks and
+  `dmesg` miss. Needs sudo.
 
-See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3).
+See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3),
+plus drafts for the two bugs found in the Oct 2026 re-test (live-manager `install-umr` on
+rpm-ostree, governor wrapper not unpinning).
 
 ### Gotchas worth knowing
 - **Live-manager installs from before June 2026: update them.** Two things changed upstream:
@@ -191,7 +199,14 @@ Not part of the CU unlock, but the same boards, the same tools, and the same the
 - [x] Re-capture `status` / masking output on hardware with the current live-manager version
       (`a929085`, Oct 2026), including live-disabling a stock WGP and masking-cost measurements
 - [x] Re-check the governor sweep on v0.4.14 (single methodology, live sampling)
-- [ ] Re-run the sweep after fixing the test board's airflow (idle temps were high in Oct 2026)
+- [x] Undervolt correctness test on the test board (Oct 2026): no usable margin, stock kept
+- [ ] File the two upstream drafts in [`upstream/`](upstream/) (live-manager `install-umr`,
+      governor wrapper)
+- [ ] Try the CPU ACPI fix ([bc250-acpi-fix](https://github.com/bc250-collective/bc250-acpi-fix),
+      C/P-states) on the test board. The CPU has no cpufreq/cpuidle today and idles at ~43 W
+      package, so this is the main software lever left for heat
+- [ ] Re-run the sweep if the test board's airflow changes (it's cooled by an external fan;
+      idle temps were high in Oct 2026)
 - [ ] Optional: a tested Arch / Omarchy page (runtime-UMR with `umr` from AUR)
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
 

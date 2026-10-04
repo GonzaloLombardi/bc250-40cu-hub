@@ -267,6 +267,32 @@ clocks down before things get dangerous. It reacts, so expect a few degrees of o
 
 Revert anytime: set `max` back to `1850` (or `1700`) and restart the service.
 
+## Undervolting: test for wrong answers, not just crashes
+
+The usual advice is "lower the voltage until it crashes, then back off". On our board that would
+have been dangerous: **the first failure was silent.** At 1850 MHz, 890 mV benchmarked at full
+speed with a clean `dmesg`, but a deterministic llama.cpp generation (temp 0, fixed seed)
+produced **different text** than at stock voltage. The GPU was computing wrong results without
+any sign of trouble.
+
+Measured with [`scripts/undervolt-test.sh`](../scripts/undervolt-test.sh) (governor TestMode,
+no config edits; Oct 2026, governor v0.4.14):
+
+| 1850 MHz @ | pp512 (tok/s) | Avg vddgfx | Package power | Same output as stock? |
+|---|---|---|---|---|
+| 930 mV (shipped) | 1072 | 900 mV | 130–136 W | ✅ reference |
+| 910 mV | 1071 | 881–887 mV | 133–137 W | ✅ 3 of 3 runs |
+| 890 mV | 1071 | 856–858 mV | 115–133 W | ❌ **2 of 2 runs mismatched** (no crash, no dmesg errors) |
+
+Takeaways for this board:
+- **The shipped curve has very little margin:** just 20 mV between the default and silent
+  miscompute.
+- **The one safe step (−20 mV) saved nothing measurable** in package power or temperature, so
+  it isn't worth the risk. We left the shipped voltages alone.
+- If you undervolt yours, check correctness and not only stability: compare a deterministic
+  output, or use the script above, which stops at the first mismatch. Keep at least one passing
+  step of margin below the value you settle on.
+
 ## Recommended starting point
 
 - **Efficiency:** `max = 1700` (best tok/s per watt) — ~87 % of peak throughput. On a board
@@ -279,8 +305,9 @@ Revert anytime: set `max` back to `1850` (or `1700`) and restart the service.
 - If your board idles hot (GPU edge above ~60 °C, motherboard "System" sensor above ~50 °C),
   **fix the airflow before tuning clocks**. It's worth more than any safe-point tweak.
 - Keep `throttling = 85` on at every tier.
-- **Undervolt cautiously:** drop a safe-point's `voltage` by 10–20 mV at a time, stress-test
-  (the unlock guide's `llama-bench` loop, or furmark/OCCT), and back off on any instability.
+- **Undervolt cautiously, if at all:** drop a safe-point's `voltage` by 10–20 mV at a time, and
+  test for **wrong output**, not just crashes (see [above](#undervolting-test-for-wrong-answers-not-just-crashes)).
+  On our board it gave no measurable benefit before outputs went wrong.
 - Enable the service so settings persist: `sudo systemctl enable cyan-skillfish-governor-smu`.
 
 *No warranty. Undervolting/overclocking can crash the GPU; keep `throttling` on and a remote
