@@ -84,6 +84,9 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
   (no BIOS flash), tested: +31 % multi-thread (7-Zip), correctness-verified, 16-thread ACPI tables,
   and a CPU+GPU combined test where a 2550 MHz CPU cap cuts the CPU peak from 94 °C to 79 °C with
   no GPU loss.
+- 🖥️ **[Display stuck at 640x480 / black after reboot (DP→HDMI adapter)](docs/display-no-edid-adapter.md)** —
+  when the adapter doesn't pass EDID: diagnose it, force 1080p system-wide with `video=`, fix the
+  saved KDE / login-screen modes. Tested through a capture card across warm and cold boots.
 - 🌡️ **[CPU frequency scaling & idle states on Bazzite (ACPI fix)](docs/cpu-acpi-fix-bazzite.md)** —
   the community SSDT override via rpm-ostree, tested: `acpi-cpufreq` + C1–C3 come up, the 40 CU
   unlock is unaffected, and measurements show **no idle saving** but a new **CPU heat knob**: a
