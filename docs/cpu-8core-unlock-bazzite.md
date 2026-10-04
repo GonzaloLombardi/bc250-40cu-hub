@@ -119,6 +119,84 @@ Journal order on the cold boot: the unit finished at 13.68 s and the governor st
 
 After a cold boot, `status` shows `12 threads present` until you reboot once.
 
+### Optional: a "reboot to enable 8 cores" notice (desktop + terminal)
+
+So you don't have to remember that reboot, the service can leave a marker and you get asked at
+login. Three small pieces:
+
+1. **A marker in `/run`.** It's tmpfs, so it's gone after any reboot and only exists while the
+   reboot is pending. A drop-in adds it after a successful unlock:
+
+   ```bash
+   # /usr/local/bin/bc250-cpu-unlock-flag  (chmod 755)
+   #!/usr/bin/env bash
+   if [ "$(nproc --all)" -lt 16 ]; then
+     mkdir -p /run/bc250 && echo pending > /run/bc250/cpu-unlock-pending
+   else
+     rm -f /run/bc250/cpu-unlock-pending
+   fi
+   ```
+   ```ini
+   # /etc/systemd/system/bc250-cpu-unlock.service.d/10-pending-flag.conf
+   [Service]
+   ExecStartPost=/usr/local/bin/bc250-cpu-unlock-flag
+   ```
+   (`ExecStartPost` only runs if `cpu-unlock` succeeded, so an unexpected mask leaves no marker.
+   Keep the logic in a script: systemd treats `$` in unit files as its own variables.)
+
+2. **A KDE notification with a button**, started at login via XDG autostart:
+
+   ```bash
+   # /usr/local/bin/bc250-cpu-unlock-notify  (chmod 755)
+   #!/usr/bin/env bash
+   FLAG=/run/bc250/cpu-unlock-pending
+   [ -f "$FLAG" ] || exit 0
+   [ "$(nproc --all)" -ge 16 ] && exit 0
+   sleep 8   # give the Plasma notification server time to start
+   ans=$(notify-send --app-name="BC-250" --icon=system-reboot --urgency=critical \
+     --action=reboot="Reiniciar ahora" --action=later="Más tarde" \
+     "BC-250: 8 núcleos listos para activar" \
+     "La CPU arrancó con $(nproc --all) hilos después de un apagado completo. La máscara de 8 núcleos ya está aplicada: reiniciá para activarlos.")
+   [ "$ans" = reboot ] && exec systemctl reboot
+   ```
+   ```ini
+   # /etc/xdg/autostart/bc250-cpu-unlock-notify.desktop
+   [Desktop Entry]
+   Type=Application
+   Name=BC-250 8-core reboot notice
+   Exec=/usr/local/bin/bc250-cpu-unlock-notify
+   Icon=system-reboot
+   NoDisplay=true
+   X-KDE-autostart-phase=2
+   ```
+   `notify-send` ≥ 0.7.9 supports `--action` and blocks until you choose. `--urgency=critical`
+   keeps it on screen in Plasma until you click.
+
+3. **A terminal prompt** for interactive shells (Konsole or SSH). It never shows in scripts or
+   `ssh host cmd`, and it defaults to *No* after 20 s:
+
+   ```bash
+   # /etc/profile.d/bc250-cpu-unlock.sh
+   if [ -n "$BASH_VERSION" ] && [ -f /run/bc250/cpu-unlock-pending ] && [ -t 0 ] && [ -t 1 ]; then
+     case $- in *i*)
+       if [ "$(nproc --all)" -lt 16 ]; then
+         printf "\n\033[1;33m⚠  BC-250:\033[0m la CPU arrancó con %s hilos (apagado completo). La máscara de\n   8 núcleos ya está aplicada; falta un reinicio para activarlos.\n" "$(nproc --all)"
+         read -r -t 20 -p "   ¿Reiniciar ahora? [s/N] " _bc250_ans || echo
+         case "$_bc250_ans" in s|S|si|SI|sí|y|Y) systemctl reboot ;; *) echo "   Podés hacerlo después con: systemctl reboot" ;; esac
+         unset _bc250_ans
+       fi ;;
+     esac
+   fi
+   ```
+
+**Tested on our board (Oct 2026):** after a full power-off (woken via Wake-on-LAN), the marker
+appeared with 12 threads. On login the Plasma notification showed both buttons. The terminal
+prompt appeared in an interactive shell (answering *n* left it running and printed the
+command), and nothing showed in a non-interactive `bash -lc`. Clicking **"Reiniciar ahora"**
+rebooted the board into **16 threads** with no marker left. The board sits at the Plasma login
+screen (no autologin), so the desktop notice appears once you log in. Game Mode sessions don't
+show Plasma notifications; use the terminal prompt or `systemctl reboot` there.
+
 > **Tip: power it on remotely.** Testing cold boots means someone has to press the power button,
 > unless Wake-on-LAN is on. The BC-250's NIC supports it (`ethtool enp4s0` → `Supports Wake-on: …g`)
 > and it woke from a full power-off on our board, but it ships disabled and an `ethtool -s … wol g`
