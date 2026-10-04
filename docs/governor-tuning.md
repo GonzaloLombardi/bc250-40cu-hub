@@ -31,11 +31,17 @@ systemctl is-active cyan-skillfish-governor-smu
 Config: **`/etc/cyan-skillfish-governor-smu/config.toml`** (world-readable). Apply changes
 with `sudo systemctl restart cyan-skillfish-governor-smu`.
 
-> The RPM marks the config `noreplace`, so package upgrades keep your existing file. An older
-> install can therefore lack newer keys (they just take built-in defaults). Compare against
-> upstream's [`default-config.toml`](https://github.com/filippor/cyan-skillfish-governor/blob/smu/default-config.toml)
-> if you want the new options. Notes below were checked against **v0.4.14** (Oct 2026). The
-> sweep was measured in June 2026 on an earlier version.
+> The RPM marks the config `%config(noreplace)`. That means: **if you never edited it**, an
+> upgrade replaces it with the new default (that's what happened on our board going to
+> v0.4.14; the file gained `temp-read`). **If you did edit it**, your file is kept and the new
+> default lands next to it as `config.toml.rpmnew`, so newer keys just take built-in defaults
+> until you merge them. Compare against upstream's
+> [`default-config.toml`](https://github.com/filippor/cyan-skillfish-governor/blob/smu/default-config.toml).
+>
+> Check what you actually run with `rpm -q cyan-skillfish-governor-smu`: the `g<hash>` suffix is
+> the source commit. Our June install said `v0.4.6` but was built from `g7f91021`, a December 2025
+> commit. Notes below were checked against **v0.4.14** (Oct 2026), and the sweep was
+> re-measured on it.
 
 ---
 
@@ -94,8 +100,11 @@ Key ideas:
   while experimenting. Until the governor *service* is enabled, any crash reboots to stock clocks.
 - **There's a second, lower limit:** with `set-method = "smu"` the governor also sets the SMU's
   own GPU temperature limit to **80 °C** at startup (`set_gpu_max_temperature(80)` in
-  `src/gpu.rs`, present since early 2026). So the firmware may pull clocks back around 80 °C,
-  before the 85 °C governor threshold. Our sweep never got there (73 °C peak). If you also run
+  `src/gpu.rs`, added Feb 2026; builds from older sources, like our June `g7f91021` one, don't
+  set it). **Don't count on it as a cap:** in our October sweep on v0.4.14 the edge sensor went
+  to 91 °C, and the clock only dipped slightly (avg 1981 MHz at a 2000 MHz pin). That's consistent
+  with the governor's own 85 °C throttle, with no sign of a hard 80 °C firmware limit. What the
+  SMU does with that value isn't documented. If you also run
   [bc250_smu_oc](https://github.com/bc250-collective/bc250_smu_oc), note that it writes its own
   SMU temperature limit (90 °C by default), and whichever tool runs last wins.
 
@@ -103,24 +112,50 @@ Key ideas:
 
 ## Measured sweep (40 CU, Bazzite 44)
 
-Each frequency was **pinned** (`min = max = F`), then `llama-bench -p 512` (Qwen2.5-3B
-Q4_K_M) was run at 40 CU. Temp/power are post-run steady state.
+**October 2026 run** (Bazzite `44.20260929`, kernel 7.2.7, Mesa 26.2.2, governor **v0.4.14**,
+default curve). Each frequency was pinned with `cyan-skillfish-performance-mode
+--fixed-frequency F`, then `llama-bench -p 512 -r 10` (Qwen2.5-3B Q4_K_M, llama.cpp `b9538`)
+ran at 40 CU. Sensors were sampled every 0.5 s **during** the load: averages are over the
+loaded samples, and peaks are the max. Between points the board cooled in adaptive mode.
+Reproduce it on your board with [`scripts/sweep-clocks.sh`](../scripts/sweep-clocks.sh) (no root
+needed).
+
+| Freq | pp512 (tok/s) | Avg sclk | Avg vddgfx | Temp avg / peak | PPT avg / peak | tok/s per W |
+|---|---|---|---|---|---|---|
+| 1500 MHz | 881 | 1500 | 874 mV | 78 / 80 °C | 115 / 122 W | 7.65 |
+| 1700 MHz | 992 | 1700 | 887 mV | 83 / 84 °C | 128 / 142 W | **7.74** |
+| 1850 MHz | 1068 | 1842 | 897 mV | 85 / 86 °C | 142 / 147 W | 7.54 |
+| 2000 MHz | 1140 | 1981 | 919 mV | 89 / **91 °C** | 158 / 168 W | 7.21 |
+
+How to read it:
+- **Throughput matches June within 1 %** at every point (873/983/1062/1144 then). Four
+  months of kernel, Mesa and governor updates changed nothing on the compute side.
+- **PPT is package power (CPU + GPU)**, so it isn't only the GPU. On this board the CPU has no
+  frequency-scaling driver loaded (stock BIOS; see the community notes on the ACPI fix), which
+  keeps the package idling around 47 W.
+- **`vddgfx` reads below the safe-point voltages** (e.g. 919 mV at 2000 MHz vs a 960 mV
+  point). The SMU applies its own offset under load. Judge undervolts by stability, not by
+  this readout.
+- **The temperatures are the outlier, and that's cooling.** At 2000 MHz the June run peaked
+  at 161 W and 73 °C. This one peaked at 168 W and **91 °C**: almost the same power, +18 °C.
+  Same board, same clocks, but with an idle GPU at 63 °C, motherboard "System" sensor at 57 °C
+  and VRM at 57 °C *before* any load, which points at case airflow (and a warmer season). At
+  1850 and 2000 MHz the governor's 85 °C throttle trims the clock slightly (avg sclk 1842 /
+  1981). Here is the ❄️ note below, demonstrated on one board.
+
+<details>
+<summary>June 2026 run (governor built from <code>g7f91021</code>, mixed methodology)</summary>
 
 | Freq cap | pp512 (tok/s) | Voltage | Temp | Power | Notes |
 |---|---|---|---|---|---|
-| 1500 MHz | 873 | 837 mV* | 53 °C | 53 W | efficient/cool |
-| 1700 MHz | 983 | 912 mV | 57 °C | 64 W | **sweet spot** |
-| 1850 MHz | 1062 | 918 mV | 60 °C | 80 W | balanced |
-| **2000 MHz** | **1144** | 960 mV | **73 °C peak** ‡ | ~161 W peak ‡ | **held full clock, no throttle** ‡ |
+| 1500 MHz | 873 | 837 mV | 53 °C | 53 W | post-run steady |
+| 1700 MHz | 983 | 912 mV | 57 °C | 64 W | post-run steady |
+| 1850 MHz | 1062 | 918 mV | 60 °C | 80 W | post-run steady |
+| 2000 MHz | 1144 | 960 mV | 73 °C peak | ~161 W peak | live peak sampling, no throttle |
 
-\* observed SMU voltage at that point on this board.
-
-‡ The 2000 MHz row was measured **live with a temp watchdog** (peak sampling), so its temp/power
-are *transient peaks* under load; the 1500–1850 rows show *post-run steady* values, so the power
-columns aren't directly comparable (the same 2000 MHz run that peaked at 161 W read ~71 W moments
-after it finished). On **this board's cooling** it held a flat 2000 MHz with **no throttling and
-only 73 °C** — but that number is the single most cooling-dependent figure in this whole doc
-(see the ❄️ note below).
+The 1500–1850 rows were read *after* each run, so their power/temp undershoot the load values.
+Only the 2000 MHz row was sampled live. Don't compare those rows with the October table.
+</details>
 
 > ### ❄️ Everything here is cooling-dependent
 >
@@ -133,15 +168,15 @@ only 73 °C** — but that number is the single most cooling-dependent figure in
 > on and watch temps live the first time you push clocks.
 
 **Takeaways:**
-- Throughput scales **almost linearly** with frequency (1500 → 1850 MHz: +23% clock → +22%
-  tok/s).
-- **Power scales faster than performance.** The 1700 → 1850 step buys ~+8% throughput for
-  ~+25% power (64 → 80 W). **1700 MHz is the efficiency sweet spot.**
-- All well within thermal limits with the 40 CU unlock active across the whole range:
-  ≤ 60 °C up to 1850 MHz, and **73 °C peak even at a sustained 2000 MHz** on this board.
-- **2000 MHz held full clock with no throttling here** and is the top safe-point in the
-  default config — but heat/power climb steeply (peak ~161 W) and the temp is heavily
-  cooling-dependent. The decision is yours (see below).
+- Throughput scales **almost linearly** with frequency (1500 → 2000 MHz: +33 % clock →
+  +29 % tok/s).
+- **Power scales a bit faster than performance.** Each step up buys ~7–13 % throughput for
+  ~10–12 % more package power. **1700 MHz has the best tok/s per watt**, but the spread is
+  small (7.2–7.7). Pick by temperature as much as by efficiency.
+- **Temperature is what decides the ceiling, and it depends on your cooling.** With good
+  airflow (June) the whole range stayed ≤ 73 °C. With poor airflow (October) 1850 already sits
+  at the 85 °C throttle and 2000 MHz overshoots to 91 °C. The 40 CU unlock adds load, so
+  check yours.
 
 > Note: combine this with the unlock — at a *fixed* clock, going 24 → 40 CU is the larger
 > win (≈1.55× from the [unlock benchmark](bazzite-40cu-runtime-umr.md#step-5--verify-it-does-real-work-benchmark));
@@ -191,11 +226,12 @@ watch -n1 'echo "$(($(cat '"$HW"'/temp1_input)/1000))C $(($(cat '"$HW"'/power1_a
 
 The default config already ships a `2000 MHz / 960 mV` safe-point — the unlock doesn't cap
 your clocks, so **whether to use it is entirely your decision**. It's the highest-throughput
-setting (**1144 tok/s here, ~1.08× over 1850 MHz**), at the cost of meaningfully more heat and
-power (peak ~161 W). On the test board's cooling it held a flat 2000 MHz with **no throttling
-at 73 °C peak** — but community boards with weaker cooling report **~90–96 °C** at this exact
-setting. Same registers, wildly different temps: it's a "know your cooling + monitor" setting,
-not fire-and-forget.
+setting (**~1140 tok/s here, ~1.07× over 1850 MHz**), at the cost of meaningfully more heat and
+power (package peak ~165 W). Our own board shows both sides. In June, with good airflow, it held
+a flat 2000 MHz at **73 °C peak**. In October, with poor airflow, it hit **91 °C** and the
+governor had to throttle it a little. Community boards with weak cooling report ~90–96 °C too.
+Same registers, wildly different temps: it's a "know your cooling + monitor" setting, not
+fire-and-forget.
 
 To raise the ceiling so the governor can reach 2000 MHz under load:
 
@@ -205,9 +241,9 @@ sudo systemctl restart cyan-skillfish-governor-smu
 ```
 
 Then **stress-test while watching temps live** (use the `watch` one-liner above, or the
-`llama-bench` loop from the unlock guide). The `throttling = 85` line, plus the SMU's own 80 °C
-limit, is your safety net: they clock down before things get dangerous. Recommended checks
-before keeping it:
+`llama-bench` loop from the unlock guide). The `throttling = 85` line is your safety net: it
+clocks down before things get dangerous. It reacts, so expect a few degrees of overshoot
+(91 °C peak in our hot run). Recommended checks before keeping it:
 
 - Temp stays below your comfort threshold under sustained load (the 85 °C throttle is a
   ceiling, not a target — many prefer to keep peaks in the low 80s).
@@ -223,10 +259,15 @@ Revert anytime: set `max` back to `1850` (or `1700`) and restart the service.
 
 ## Recommended starting point
 
-- **Efficiency:** `max = 1700` (the measured sweet spot) — coolest/quietest for ~92% of peak.
-- **Balanced:** `max = 1850` — top of the tested range, still ≤ 60 °C here.
-- **Max performance:** `max = 2000` — highest throughput, runs hot (~90 °C+); your call, with
-  cooling + monitoring (see [Going to 2000 MHz](#going-to-2000-mhz-the-top-safe-point)).
+- **Efficiency:** `max = 1700` (best tok/s per watt) — ~87 % of peak throughput. On a board
+  with poor airflow it's also the highest point that stays clear of the 85 °C throttle (83 °C
+  avg in our hot run).
+- **Balanced:** `max = 1850` (the shipped default) — ~94 % of peak. Fine with decent cooling
+  (≤ 60 °C in June); it sits right at the throttle threshold when airflow is poor.
+- **Max performance:** `max = 2000` — highest throughput, runs hot (~90 °C on weak cooling);
+  your call, with cooling + monitoring (see [Going to 2000 MHz](#going-to-2000-mhz-the-top-safe-point)).
+- If your board idles hot (GPU edge above ~60 °C, motherboard "System" sensor above ~50 °C),
+  **fix the airflow before tuning clocks**. It's worth more than any safe-point tweak.
 - Keep `throttling = 85` on at every tier.
 - **Undervolt cautiously:** drop a safe-point's `voltage` by 10–20 mV at a time, stress-test
   (the unlock guide's `llama-bench` loop, or furmark/OCCT), and back off on any instability.
