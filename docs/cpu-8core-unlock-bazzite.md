@@ -16,7 +16,9 @@ script as the [40 CU guide](bazzite-40cu-runtime-umr.md).
 
 - **Warm reboot keeps it, cold boot loses it.** `systemctl reboot` keeps the unlock. Power-off,
   PSU switch or unplug reverts the mask to `0x77`, so you're back on 6 cores. Nothing is
-  written to flash, so cutting power is a guaranteed way back to stock.
+  written to flash, so cutting power is a guaranteed way back to stock. To make it stick across
+  cold boots without flashing anything, see the
+  [re-apply service](#surviving-cold-boots-a-re-apply-service-that-never-reboots).
 - **It needs a reboot to show up.** The mask is written live, but firmware only enumerates the
   extra cores on the next (warm) boot.
 - **The GPU governor has to be stopped during the SMU access.** Both use the same index/data
@@ -69,6 +71,65 @@ sudo systemctl reboot        # warm reboot, keeps the 8 cores
 Verified after the reboot: both SSDTs load from the initrd, and all 16 CPUs report `schedutil`
 and 4 idle states.
 
+## Surviving cold boots: a re-apply service that never reboots
+
+The mask lives in the SMU's runtime state. Power-off clears it and the firmware writes `0x77`
+back on the next power-on, which is why the unlock is lost. The safe way to make it stick
+without flashing the BIOS is a boot service that **re-writes the mask but doesn't reboot**. The
+cores then come up on the next reboot you do yourself. No double boot and no bootloop risk:
+the service never triggers a reset, and with 16 threads already present it does nothing.
+
+```ini
+# /etc/systemd/system/bc250-cpu-unlock.service
+[Unit]
+Description=BC-250: re-apply 8-core CPU unlock mask after a cold boot (active from the next reboot)
+# Run before anything else that talks to the SMU through the 0xB8/0xBC index/data pair.
+Before=cyan-skillfish-governor-smu.service bc250-cu-live-manager.service
+ConditionPathExists=/usr/local/bin/bc250-cu-live-manager
+
+[Service]
+Type=oneshot
+# 16 threads present -> no-op. Mask 0x77 -> writes 0xFF. Any other mask -> refuses, no write.
+# Never reboots: the extra cores show up on the next (warm) reboot you choose.
+ExecStart=/usr/local/bin/bc250-cu-live-manager --yes cpu-unlock
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable bc250-cpu-unlock.service
+```
+
+It uses the copy of the live-manager that `install-service` puts in `/usr/local/bin` (see the
+[40 CU guide](bazzite-40cu-runtime-umr.md#step-6--persist-across-reboots-optional)). `Before=` keeps
+the GPU governor from starting until the SMU write is done.
+
+**Tested on our board (Oct 2026), two full cycles:**
+
+| Event | Threads | Service log |
+|---|---|---|
+| Running with 8 cores | 16 | `CPU cores are already unlocked and active (16 threads present)` |
+| Power-off → power-on (cold) | 12 | `core presence mask: 0x00000077` → `core mask after write: 0x000000ff`, no reboot |
+| Then `systemctl reboot` (warm) | **16** | `already unlocked` (no-op) |
+
+Journal order on the cold boot: the unit finished at 13.68 s and the governor started at
+13.70 s. The 40 CU service and the GPU governor came up normally in every boot.
+
+After a cold boot, `status` shows `12 threads present` until you reboot once.
+
+> **Tip: power it on remotely.** Testing cold boots means someone has to press the power button,
+> unless Wake-on-LAN is on. The BC-250's NIC supports it (`ethtool enp4s0` → `Supports Wake-on: …g`)
+> and it woke from a full power-off on our board, but it ships disabled and an `ethtool -s … wol g`
+> doesn't survive a reboot. Make it persistent through NetworkManager:
+> ```bash
+> sudo nmcli connection modify "$(nmcli -g GENERAL.CONNECTION device show enp4s0)" 802-3-ethernet.wake-on-lan magic
+> sudo nmcli device reapply enp4s0
+> ```
+> Then send a magic packet to the board's MAC from another machine on the same LAN
+> (`wakeonlan <mac>`, `etherwake`, or a few lines of PowerShell).
+
 ---
 
 ## Results (measured)
@@ -118,4 +179,11 @@ slightly faster, because the CPU stops eating into the shared power budget.
 ## Revert
 
 Power the board off completely (not reboot) and you're back on 6 cores. The 16-thread ACPI
-tables can stay; they're correct for 6 cores too.
+tables can stay; they're correct for 6 cores too. If you installed the re-apply service, disable
+it first, or it will write the mask again on the next boot:
+
+```bash
+sudo systemctl disable --now bc250-cpu-unlock.service
+sudo rm /etc/systemd/system/bc250-cpu-unlock.service && sudo systemctl daemon-reload
+sudo systemctl poweroff      # then power on: 6 cores
+```
