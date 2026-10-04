@@ -62,17 +62,19 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 ## Guides in this repo
 
 - 📘 **[Unlocking 40 CUs on Bazzite (runtime-UMR)](docs/bazzite-40cu-runtime-umr.md)** —
-  tested end-to-end on Bazzite 44 / kernel 7.0.9-fc44: rollback pin → layer `umr` →
-  read harvest map → dry-run → apply → **A/B benchmark (1.55×)** → systemd persistence →
-  revert. Includes the kernel-version pitfall and troubleshooting.
+  tested end-to-end on Bazzite 44 (kernel 7.0.9 in June 2026, **re-tested on kernel 7.2.7 /
+  Mesa 26.2.2 in Oct 2026**): rollback pin → layer `umr` → read harvest map → dry-run →
+  apply → **A/B benchmark (1.55–1.56×)** → systemd persistence → revert. Includes the
+  kernel-version pitfall and troubleshooting.
 - 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
-  `config.toml` explained, plus a **measured frequency sweep at 40 CU** (1500/1700/1850/2000 MHz →
-  throughput, temp, power), the **1700 MHz efficiency sweet spot**, voltage-curve interpolation,
-  the SMU 80 °C limit, D-Bus frequency pinning, and a cooling-dependency note.
+  `config.toml` explained, plus a **measured frequency sweep at 40 CU on v0.4.14**
+  (1500/1700/1850/2000 MHz → throughput, voltage, temp, package power, tok/s per W), the
+  **1700 MHz efficiency sweet spot**, voltage-curve interpolation, D-Bus frequency pinning, and
+  a real before/after showing how much airflow changes temps (73 °C vs 91 °C at the same clock).
 - 🧩 **[Selective WGP/CU masking](docs/selective-wgp-masking.md)** — for **scattered-harvest or
   faulty-WGP boards**: `SE.SH.WGP` addressing, `enable-wgp`/`disable-wgp`, masking stock WGPs
-  live (now allowed upstream), a bisection workflow to find a bad WGP, and persisting a custom
-  (e.g. 38/40) layout.
+  live (tested), **what masking costs** (the slowest shader array sets the pace: 38 CU ≈ 90 %,
+  36 CU ≈ 32 CU), a bisection workflow to find a bad WGP, and persisting a custom layout.
 - 🛠️ **[Kernel-patch method (mutable distros)](docs/kernel-patch-mutable-distros.md)** — quick
   reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
   PKGBUILD), with verification and revert. *Upstream archived; not for atomic distros.*
@@ -83,6 +85,9 @@ Validate a board quickly:
 - [`scripts/benchmark-40cu.sh`](scripts/benchmark-40cu.sh) — **A/B proof**: measures pp512 at
   40 CU vs 24 CU and reports the speedup (~1.55× = PASS). Restores 40 CU on exit.
   `sudo ./benchmark-40cu.sh`.
+- [`scripts/sweep-clocks.sh`](scripts/sweep-clocks.sh) — **clock sweep**: pins 1500–2000 MHz via
+  the governor's D-Bus helper and logs pp512, sclk, vddgfx, temp and power *under load*. This is
+  the method behind the governor table. `./sweep-clocks.sh` (no root needed).
 
 See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3).
 
@@ -176,8 +181,11 @@ Not part of the CU unlock, but the same boards, the same tools, and the same the
       Bazzite section themselves (Sept 2026), and the gotcha is fixed upstream
 - [x] Oct 2026 refresh: duggasco archive, live-manager breaking changes, governor v0.4.14,
       llama.cpp release tags, new references
-- [ ] Re-capture `status` / masking output on hardware with the current live-manager version
-- [ ] Re-check the governor sweep on v0.4.14 (interpolation, SMU 80 °C limit)
+- [x] Re-capture `status` / masking output on hardware with the current live-manager version
+      (`a929085`, Oct 2026), including live-disabling a stock WGP and masking-cost measurements
+- [x] Re-check the governor sweep on v0.4.14 (single methodology, live sampling)
+- [ ] Re-run the sweep after fixing the test board's airflow (idle temps were high in Oct 2026)
+- [ ] Optional: a tested Arch / Omarchy page (runtime-UMR with `umr` from AUR)
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
 
 ---

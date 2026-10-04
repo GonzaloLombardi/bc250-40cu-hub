@@ -74,7 +74,10 @@ across 4 rows (SE0.SH0, SE0.SH1, SE1.SH0, SE1.SH1); stock has WGP0–2 on (6 CUs
 ## Prerequisites
 
 - An AMD BC-250 board confirmed via `lspci -nn | grep 13fe`.
-- Bazzite (any recent version). Tested on **Bazzite 44 (Kinoite) / kernel 7.0.9-ogc3.2.fc44**.
+- Bazzite (any recent version). Tested on **Bazzite 44 (Kinoite)**: first on `44.20260608` /
+  kernel 7.0.9-ogc3.2 (June 2026), re-tested on `44.20260929` / kernel 7.2.7-ogc1.1 /
+  Mesa 26.2.2 (Oct 2026) with live-manager `a929085`. The `umr` layer and the boot service
+  carried over the image update untouched.
 - Sudo/root, a network connection, and the ability to reboot once (to layer `umr`).
 - A **remote shell fallback** (SSH from another machine) is strongly recommended in case a
   register write hangs the GPU — you can then `reboot` to recover.
@@ -143,15 +146,23 @@ Look at the table. The **lucky / contiguous** case looks like this (WGP3–4 off
 ```
   Legend     : D+ driver+routed, S+ SPI+routed, D! driver+off, -- off
 
+  +---------+------+------+------+------+------+------+------------+--------+
+  | Row     | WGP0 | WGP1 | WGP2 | WGP3 | WGP4 | SPI  | CC         | CUs    |
+  |         | 0-1  | 2-3  | 4-5  | 6-7  | 8-9  |      |            |        |
+  +---------+------+------+------+------+------+------+------------+--------+
   | SE0.SH0 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
   | SE0.SH1 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
   | SE1.SH0 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
   | SE1.SH1 |  D+  |  D+  |  D+  |  --  |  --  | 0x07 | 0xfff80000 |   6/10 |
+  +---------+------+------+------+------+------+------+------------+--------+
 
   CUs active & routed  : 24/40
 ```
 
-(Older versions printed `SPI total : 24/40 CUs` instead of the last line.)
+(Older versions printed `SPI total : 24/40 CUs` instead of the last line. If you've already
+unlocked once this boot and gone back with `stock-dispatch`, CC reads `0xffe00000` instead:
+`stock-dispatch` only restores the SPI/RLC dispatch masks, which is what actually gates the
+extra CUs. A reboot without the service brings CC back to `0xfff80000`.)
 
 - **Contiguous (as above):** the common case. `enable all` is the normal next step.
 - **Scattered** (disabled WGPs interspersed): use **selective WGP masking** (`enable-wgp` /
@@ -175,16 +186,37 @@ sudo ~/bc250-cu-live-manager.sh enable all --yes
 sudo ~/bc250-cu-live-manager.sh status
 ```
 
-Expected after unlock:
+Expected after unlock (real capture, live-manager `a929085`, Oct 2026):
 
 ```
+  UMR        : /usr/bin/umr
+  UMR inst   : 1 (auto)
+  ASIC       : cyan_skillfish.gfx1013
+  amdgpu     : bc250_cc_write_mode=not exposed, active_cu_number=24
+  CPU        : 12 threads present, 12 online; mask not probed (governor active)
+  Service    : enabled
+  Boot sync  : current table saved
+  Source     : SPI dispatch masks + amdgpu boot CU map
+  Legend     : D+ driver+routed, S+ SPI+routed, D! driver+off, -- off
+
+  +---------+------+------+------+------+------+------+------------+--------+
+  | Row     | WGP0 | WGP1 | WGP2 | WGP3 | WGP4 | SPI  | CC         | CUs    |
+  |         | 0-1  | 2-3  | 4-5  | 6-7  | 8-9  |      |            |        |
+  +---------+------+------+------+------+------+------+------------+--------+
   | SE0.SH0 |  D+  |  D+  |  D+  |  S+  |  S+  | 0x1f | 0xffe00000 |  10/10 |
-  ... (×4 rows)
+  | SE0.SH1 |  D+  |  D+  |  D+  |  S+  |  S+  | 0x1f | 0xffe00000 |  10/10 |
+  | SE1.SH0 |  D+  |  D+  |  D+  |  S+  |  S+  | 0x1f | 0xffe00000 |  10/10 |
+  | SE1.SH1 |  D+  |  D+  |  D+  |  S+  |  S+  | 0x1f | 0xffe00000 |  10/10 |
+  +---------+------+------+------+------+------+------+------------+--------+
 
   CUs active & routed  : 40/40
 ```
 
-(`S+` = the formerly-harvested WGPs, now routed via SPI.)
+- `S+` = the formerly harvested WGPs, now routed via SPI.
+- `active_cu_number=24` is expected (see the note above).
+- `Boot sync` tells you whether the saved boot table matches what's live.
+- `CPU … mask not probed (governor active)`: the script skips the SMU CPU-mask probe while the
+  GPU governor runs, because both talk to the same SMU. Harmless.
 
 ## Step 5 — Verify it does real work (benchmark)
 
@@ -214,19 +246,24 @@ LD_LIBRARY_PATH="$LIB" "$BIN" -m ~/models/qwen2.5-3b-q4.gguf -p 512 -n 0 -ngl 99
 sudo ~/bc250-cu-live-manager.sh enable all --yes
 ```
 
-**Reference result** (Bazzite 44, BC-250 @ governor default, Qwen2.5-3B Q4_K_M):
+**Reference result** (BC-250 @ governor default range 1000–1850 MHz, Qwen2.5-3B Q4_K_M,
+llama.cpp `b9538` Vulkan; [`benchmark-40cu.sh`](../scripts/benchmark-40cu.sh) does this A/B for you):
 
-| Config | pp512 (tok/s) | Speedup |
+| Config | Jun 2026 (44.20260608, kernel 7.0.9) | Oct 2026 (44.20260929, kernel 7.2.7, Mesa 26.2.2) |
 |---|---|---|
-| 40 CU | **1062** | **1.55×** |
-| 24 CU (stock) | 684 | 1.00× |
+| 40 CU | **1062** tok/s (**1.55×**) | **1072** tok/s (**1.56×**) |
+| 24 CU (stock) | 684 tok/s | 685 tok/s |
 
-Peaked at ~60 °C / ~74 W during the run — well within limits.
+The ratio held across four months of kernel/Mesa/governor updates. The download snippet above
+was re-run on the board in October 2026: it resolved `b11382`, and that build gives 1076 tok/s at
+40 CU, the same as `b9538`. Newer llama.cpp builds don't move this benchmark. Peak was ~60–72 °C
+depending on how warm the board already was, well within limits.
 
-Watch thermals live during any stress test:
+Watch thermals live during any stress test (the `hwmonN` number changes between boots, so
+look it up by name):
 
 ```bash
-HW=/sys/class/hwmon/hwmon1   # the one whose `name` is "amdgpu"
+HW=$(for h in /sys/class/hwmon/hwmon*; do [ "$(cat $h/name)" = amdgpu ] && echo $h; done)
 watch -n1 'echo "$(($(cat '$HW'/temp1_input)/1000))C $(($(cat '$HW'/power1_average)/1000000))W"'
 ```
 

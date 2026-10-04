@@ -75,19 +75,46 @@ sudo ~/bc250-cu-live-manager.sh disable all             # turn off every dispatc
 sudo ~/bc250-cu-live-manager.sh table
 ```
 
-Always preview with `--dry-run` first. Real output of disabling one harvested WGP (captured on
-a June 2026 build; exact wording may differ on newer versions):
+Always preview with `--dry-run` first. Real output of disabling one harvested WGP (live-manager
+`a929085`, Oct 2026; CC writes trimmed):
 
 ```text
 $ sudo ./bc250-cu-live-manager.sh disable-wgp 1.0.4 --dry-run
 [ OK ] disabled SE1 SH0 WGP4 (CU8-CU9)
-dry-run: umr -w …mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x1f -b 0 0 0xffffffff
-dry-run: umr -w …mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x0f -b 1 0 0xffffffff   <- SE1.SH0 -> 0x0f
-dry-run: umr -w …mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x1f -b 1 1 0xffffffff
+dry-run: /usr/bin/umr -i 1 -w cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x1f -b 0 0 0xffffffff
+dry-run: /usr/bin/umr -i 1 -w cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x1f -b 0 1 0xffffffff
+dry-run: /usr/bin/umr -i 1 -w cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x0f -b 1 0 0xffffffff   <- SE1.SH0 -> 0x0f
+dry-run: /usr/bin/umr -i 1 -w cyan_skillfish.gfx1013.mmSPI_PG_ENABLE_STATIC_WGP_MASK 0x1f -b 1 1 0xffffffff
+dry-run: /usr/bin/umr -i 1 -w cyan_skillfish.gfx1013.mmRLC_PG_ALWAYS_ON_WGP_MASK 0x1f
 [ OK ] dispatch registers updated (38/40 CUs target)
 ```
 
-So that one change lands the board at **38/40 CUs**, with WGP4 of SE1.SH0 masked out.
+So that one change lands the board at **38/40 CUs**, with WGP4 of SE1.SH0 masked out. The
+removed alias now fails cleanly: `disable-cu 1.0.8` → `[ERR ] unknown command: disable-cu`.
+
+### What masking costs: the slowest row sets the pace
+
+Masking a WGP costs **more than its share** of throughput. Measured on our board (pp512,
+Qwen2.5-3B Q4_K_M, governor default range, Oct 2026):
+
+| Mask | CUs | Rows at 8 CUs | pp512 (tok/s) | vs 40 CU |
+|---|---|---|---|---|
+| all on | 40 | 0 | 1072 | 100 % |
+| `disable-wgp 1.0.4` (harvested) | 38 | 1 | 966 | 90 % |
+| `disable-wgp 0.0.0` (stock) | 38 | 1 | 965 | 90 % |
+| `disable-wgp 0.0.4 0.1.4` | 36 | 2 | 907 | 85 % |
+| WGP4 off on all 4 rows | 32 | 4 | 906 | 85 % |
+| stock (`stock-dispatch`) | 24 | — | 685 | 64 % |
+
+Two lessons:
+
+- **It doesn't matter which WGP in a row you mask.** Stock WGP0 and unlocked WGP4 cost the same.
+- **Uneven rows are bottlenecked by the shortest one.** With two rows trimmed you're already
+  at 32-CU speed, and trimming the other two rows costs almost nothing more. A 38-CU result is
+  worth ~90 %, not 95 %, and 36 is worth the same as 32.
+
+(One board, one workload. Compute-heavy kernels that split work evenly across shader arrays
+behave like this; your mileage may vary with other loads.)
 
 ---
 
@@ -104,8 +131,11 @@ What that means in practice:
 - The only change is SPI dispatch: the driver still believes those CUs exist
   (`active_cu_number` doesn't change). That makes this a way to **stop sending work to a stock
   WGP you suspect is faulty**, without a reboot.
-- We haven't tested disabling stock WGPs on hardware. Use `--dry-run` first, keep a remote
-  shell, and stress-test afterwards just like with the harvested ones.
+- **Tested on our board (Oct 2026):** `disable-wgp 0.0.0` shows the WGP as `D!`
+  (`SE0.SH0 | D! | D+ | D+ | S+ | S+ | 0x1e`), the board stays stable through a llama-bench run
+  with no amdgpu errors in `dmesg`, and `enable all` brings it back. Throughput is the same as
+  masking a harvested WGP in the same row (see the table above). Still use `--dry-run` first and
+  keep a remote shell.
 - For a boot-time mask the driver itself respects, the kernel-patch path still has the
   `disable_cu=` modparam (see [duggasco](https://github.com/duggasco/bc250-40cu-unlock), now
   archived).
@@ -121,7 +151,8 @@ If `enable all` is unstable on your board:
 2. If it crashes, `stock-dispatch` to recover, then enable the harvested WGPs **one row at a
    time** (`enable-wgp 0.0.3 0.0.4`, test, then the next row…).
 3. When a specific row/WGP triggers the crash, leave that one masked and enable the rest.
-   Typical stable landing points are 36 or 38 CUs.
+   Typical stable landing points are 36 or 38 CUs. Keep the
+   [row bottleneck](#what-masking-costs-the-slowest-row-sets-the-pace) in mind when comparing them.
 4. duggasco also ships a per-WGP **health test** (`bc250-cu-health-test.sh` + `bc250-cu-mask.sh`)
    that automates this on the kernel-patch path — useful as a cross-reference. The repo is
    archived but still clones.
