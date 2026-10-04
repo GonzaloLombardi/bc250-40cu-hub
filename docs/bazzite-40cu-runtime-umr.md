@@ -294,8 +294,8 @@ reapplied automatically.
 > [`ce4e373`](https://github.com/WinnieLV/bc250-cu-live-manager/commit/ce4e373), reported as
 > [#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)). Current versions write
 > `UMR_INSTANCE=` empty and `apply-service` auto-detects the DRI instance on every boot, so
-> there's nothing to do. (Re-confirmed Oct 2026 on `a929085`: across four reboots the board
-> came up as instance 1 and then as instance 0, and the service applied 40/40 every time.)
+> there's nothing to do. (Re-confirmed Oct 2026 on `a929085`: across three boots with the service the board
+> came up as instance 1, 1 and then 0, and it applied 40/40 every time.)
 >
 > On older builds, `write-service-table` baked the current instance (e.g. `UMR_INSTANCE=1`)
 > into the config. The DRI number isn't stable across boots (a power-cycle can flip
