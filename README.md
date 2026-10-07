@@ -1,17 +1,23 @@
-# bc250-40cu-hub
+# bc250-hub
 
-**A reference hub for unlocking all 40 compute units on the AMD BC-250** (Cyan Skillfish,
-`gfx1013`, PCI `1002:13fe`) — salvaged PS5 APUs that ship with only **24 of 40 CUs** active.
+**Tested guides and a reference index for running the AMD BC-250 on Linux** (Cyan Skillfish,
+`gfx1013`, PCI `1002:13fe`): salvaged PS5 APUs that ship with only **24 of 40 GPU compute units**
+and **6 of 8 CPU cores** active.
 
-This repo does **not** replace the great tools that already exist. It **indexes** them,
-explains *which method fits which situation*, and adds the missing piece: a **tested,
-end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UMR approach.
+It started as a hub for the 40 CU unlock and grew from there: GPU unlock and masking, governor
+and voltage tuning, CPU unlock and ACPI fix, display quirks. This repo does **not** replace the
+tools that already exist. It **indexes** them, explains *which method fits which situation*, and
+adds what was missing: **step-by-step guides applied and measured on a real board**, mostly on
+**Bazzite** (immutable / atomic Fedora).
 
 > **New here?**
-> - On **Bazzite / Fedora Atomic** → go straight to the **[Bazzite runtime-UMR guide »](docs/bazzite-40cu-runtime-umr.md)**
-> - On a **normal/mutable distro** → either the [kernel patch](docs/kernel-patch-mutable-distros.md)
+> - **40 CU unlock on Bazzite / Fedora Atomic** → the **[runtime-UMR guide »](docs/bazzite-40cu-runtime-umr.md)**
+> - **40 CU unlock on a normal/mutable distro** → either the [kernel patch](docs/kernel-patch-mutable-distros.md)
 >   from duggasco (repo **archived** Sept 2026, still usable) or the same runtime-UMR tool, which
 >   now supports apt / pacman / dnf too
+> - **Clocks, temps, power** → [governor tuning](docs/governor-tuning.md)
+> - **CPU** → [ACPI fix](docs/cpu-acpi-fix-bazzite.md), then the [8-core unlock](docs/cpu-8core-unlock-bazzite.md)
+> - **640x480 or black screen through a DP→HDMI adapter** → [display fix](docs/display-no-edid-adapter.md)
 
 ---
 
@@ -23,9 +29,10 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 | PCI ID | `1002:13fe` |
 | CUs | **40 total**, 24 enabled stock, 16 harvested (usually healthy, but not guaranteed: test yours) |
 | Layout | 4 shader arrays (SE0.SH0/SH1, SE1.SH0/SH1) × 5 WGPs × 2 CUs = 40 |
-| Typical gain | ~1.5–1.6× compute throughput (prefill / pp512) |
+| Typical gain (40 CU) | ~1.5–1.6× compute throughput (prefill / pp512) |
+| CPU | 8 × Zen 2, 6 enabled stock (6c/12t); 8c/16t after the runtime unlock |
 
-**Registers involved** (same for every method):
+**CU unlock registers** (same for every method):
 
 | Register | Stock | Unlocked |
 |---|---|---|
@@ -35,7 +42,7 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 
 ---
 
-## Which method should I use?
+## 40 CU unlock: which method should I use?
 
 | Method | Best for | How it works | Survives kernel update | Reverts by |
 |---|---|---|---|---|
@@ -61,18 +68,15 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 
 ## Guides in this repo
 
+Every guide below except the kernel-patch reference was applied and measured on our test board
+(Bazzite 44).
+
+### GPU
 - 📘 **[Unlocking 40 CUs on Bazzite (runtime-UMR)](docs/bazzite-40cu-runtime-umr.md)** —
   tested end-to-end on Bazzite 44 (kernel 7.0.9 in June 2026, **re-tested on kernel 7.2.7 /
   Mesa 26.2.2 in Oct 2026**): rollback pin → layer `umr` → read harvest map → dry-run →
   apply → **A/B benchmark (1.55–1.56×)** → systemd persistence → revert. Includes the
   kernel-version pitfall and troubleshooting.
-- 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
-  `config.toml` explained, plus a **measured frequency sweep at 40 CU on v0.4.14**
-  (1500/1700/1850/2000 MHz → throughput, voltage, temp, package power, tok/s per W), the
-  **1700 MHz efficiency sweet spot**, voltage-curve interpolation, D-Bus frequency pinning,
-  a real before/after showing how much airflow changes temps (73 °C vs 91 °C at the same clock),
-  and an **undervolt test that caught silent miscompute** (wrong output, no crash) just 40 mV
-  below stock.
 - 🧩 **[Selective WGP/CU masking](docs/selective-wgp-masking.md)** — for **scattered-harvest or
   faulty-WGP boards**: `SE.SH.WGP` addressing, `enable-wgp`/`disable-wgp`, masking stock WGPs
   live (tested), **what masking costs** (the slowest shader array sets the pace: 38 CU ≈ 90 %,
@@ -80,19 +84,31 @@ end-to-end guide for immutable / atomic distros (Bazzite)** using the runtime-UM
 - 🛠️ **[Kernel-patch method (mutable distros)](docs/kernel-patch-mutable-distros.md)** — quick
   reference for Arch/CachyOS/Fedora/Debian using [duggasco]'s patch (build script, manual,
   PKGBUILD), with verification and revert. *Upstream archived; not for atomic distros.*
-- 🧠 **[8-core CPU unlock on Bazzite](docs/cpu-8core-unlock-bazzite.md)** — runtime SMU unlock
-  (no BIOS flash), tested: +31 % multi-thread (7-Zip), correctness-verified, 16-thread ACPI tables,
-  and a CPU+GPU combined test where a 2550 MHz CPU cap cuts the CPU peak from 94 °C to 79 °C with
-  no GPU loss.
-- 🖥️ **[Display stuck at 640x480 / black after reboot (DP→HDMI adapter)](docs/display-no-edid-adapter.md)** —
-  when the adapter doesn't pass EDID: diagnose it, force 1080p system-wide with `video=`, fix the
-  saved KDE / login-screen modes. Tested through a capture card across warm and cold boots.
+- 🎚️ **[Governor & clock/voltage tuning](docs/governor-tuning.md)** — `cyan-skillfish-governor-smu`
+  `config.toml` explained, plus a **measured frequency sweep at 40 CU on v0.4.14**
+  (1500/1700/1850/2000 MHz → throughput, voltage, temp, package power, tok/s per W), the
+  **1700 MHz efficiency sweet spot**, voltage-curve interpolation, D-Bus frequency pinning,
+  a real before/after showing how much airflow changes temps (73 °C vs 91 °C at the same clock),
+  and an **undervolt test that caught silent miscompute** (wrong output, no crash) just 40 mV
+  below stock.
+
+### CPU
 - 🌡️ **[CPU frequency scaling & idle states on Bazzite (ACPI fix)](docs/cpu-acpi-fix-bazzite.md)** —
   the community SSDT override via rpm-ostree, tested: `acpi-cpufreq` + C1–C3 come up, the 40 CU
   unlock is unaffected, and measurements show **no idle saving** but a new **CPU heat knob**: a
   2550 MHz cap takes a full-CPU load from 91 °C / 76 W to 65 °C / 53 W.
+- 🧠 **[8-core CPU unlock on Bazzite](docs/cpu-8core-unlock-bazzite.md)** — runtime SMU unlock
+  (no BIOS flash), tested: +31 % multi-thread (7-Zip), correctness-verified, 16-thread ACPI tables,
+  a re-apply service for cold boots, and a CPU+GPU combined test where a 2550 MHz CPU cap cuts the
+  CPU peak from 94 °C to 79 °C with no GPU loss.
 
-Validate a board quickly:
+### Display
+- 🖥️ **[Display stuck at 640x480 / black after reboot (DP→HDMI adapter)](docs/display-no-edid-adapter.md)** —
+  when the adapter doesn't pass EDID: diagnose it, force 1080p system-wide with `video=`, fix the
+  saved KDE / login-screen modes. Tested through a capture card across warm and cold boots.
+
+### Scripts
+Validate and measure a board:
 - [`scripts/validate-40cu.sh`](scripts/validate-40cu.sh) — checks the SPI/CC registers on all
   4 shader arrays (PASS/FAIL); `--bench` adds a pp512 run. `sudo ./validate-40cu.sh [--bench]`.
 - [`scripts/benchmark-40cu.sh`](scripts/benchmark-40cu.sh) — **A/B proof**: measures pp512 at
@@ -106,9 +122,10 @@ Validate a board quickly:
   deterministic llama.cpp output differs from stock. It catches errors that benchmarks and
   `dmesg` miss. Needs sudo.
 
-See also: [`upstream/`](upstream/) — bug report filed upstream as [bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3),
-plus drafts for the two bugs found in the Oct 2026 re-test (live-manager `install-umr` on
-rpm-ostree, governor wrapper not unpinning).
+See also: [`upstream/`](upstream/) — drafts for the two bugs found in the Oct 2026 re-test
+(live-manager `install-umr` on rpm-ostree, governor wrapper not unpinning). Resolved reports, like
+[bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3), are kept in
+[`upstream/archive/`](upstream/archive/).
 
 ### Gotchas worth knowing
 - **Live-manager installs from before June 2026: update them.** Two things changed upstream:
@@ -167,8 +184,8 @@ rpm-ostree, governor wrapper not unpinning).
   linear voltage interpolation, a D-Bus API plus the `cyan-skillfish-performance-mode` helper, and
   `temp-read`/`fix-freq` options. See our [tuning guide](docs/governor-tuning.md).
 
-### CPU cores (related)
-Not part of the CU unlock, but the same boards, the same tools, and the same thermal budget:
+### CPU cores
+Same boards, same tools, and the same thermal budget as the GPU:
 - **CPU P-states / C-states**: the stock BIOS exposes none. The ACPI fix adds them; see our
   [tested Bazzite page](docs/cpu-acpi-fix-bazzite.md).
 - **8-core unlock**: WinnieLV's script has `cpu-unlock` (SMU core mask `0x77` → `0xFF`,
@@ -199,27 +216,15 @@ Not part of the CU unlock, but the same boards, the same tools, and the same the
 
 ## Status & roadmap
 
-- [x] Bazzite runtime-UMR guide (tested, with benchmark)
-- [x] Selective WGP masking guide for scattered-harvest boards
-- [x] Governor tuning notes (safe-point profiles, thermal data)
-- [x] Mutable-distro (kernel patch) quickstart cross-link
-- [x] Report upstream: `write-service-table` baked a volatile `UMR_INSTANCE` — filed as
-      [WinnieLV/bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3)
-      (follow-up to their #1), **fixed upstream in `ce4e373`** and confirmed across two real
-      power-cycles on hardware. Our PR became redundant (maintainer fixed it directly).
-- [x] Polish: add a LICENSE (CC BY 4.0)
-- [x] ~~Contribute a note to elektricM docs~~ — dropped: they added a runtime-UMR option and a
-      Bazzite section themselves (Sept 2026), and the gotcha is fixed upstream
-- [x] Oct 2026 refresh: duggasco archive, live-manager breaking changes, governor v0.4.14,
-      llama.cpp release tags, new references
-- [x] Re-capture `status` / masking output on hardware with the current live-manager version
-      (`a929085`, Oct 2026), including live-disabling a stock WGP and masking-cost measurements
-- [x] Re-check the governor sweep on v0.4.14 (single methodology, live sampling)
-- [x] Undervolt correctness test on the test board (Oct 2026): no usable margin, stock kept
+Done so far: the 40 CU guide (June 2026, re-tested Oct 2026), WGP masking with masking-cost
+measurements, the governor sweep on v0.4.14, the undervolt correctness test (no usable margin,
+stock kept), the CPU ACPI fix and 8-core unlock, the display/EDID fix, and an upstream bug report
+([bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3), fixed in
+`ce4e373`). The full history is in the git log.
+
+Open:
 - [ ] File the two upstream drafts in [`upstream/`](upstream/) (live-manager `install-umr`,
       governor wrapper)
-- [x] CPU ACPI fix (C/P-states) applied and measured on the test board (Oct 2026). No idle
-      saving; it enables CPU frequency caps ([page](docs/cpu-acpi-fix-bazzite.md))
 - [ ] Re-run the sweep if the test board's airflow changes (it's cooled by an external fan;
       idle temps were high in Oct 2026)
 - [ ] Optional: a tested Arch / Omarchy page (runtime-UMR with `umr` from AUR)
@@ -231,11 +236,11 @@ Not part of the CU unlock, but the same boards, the same tools, and the same the
 
 The original documentation in this repo is licensed under
 **[CC BY 4.0](LICENSE)** — reuse and adapt freely **with attribution** (e.g. *"based on
-bc250-40cu-hub by GonzaloLombardi, CC BY 4.0"* + a link back).
+bc250-hub by GonzaloLombardi, CC BY 4.0"* + a link back).
 
 All upstream work belongs to its respective authors (linked above) under their own
 licenses. This repo is an independent index + original documentation; it redistributes
 **no** third-party code — it links to it.
 
-*No warranty. The unlock writes low-level GPU registers and raises power/thermals — keep a
+*No warranty. The unlocks write low-level GPU and SMU registers and raise power/thermals — keep a
 remote shell and adequate cooling, and read each tool's own safety notes first.*

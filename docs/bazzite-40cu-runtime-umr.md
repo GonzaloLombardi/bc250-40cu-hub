@@ -138,8 +138,8 @@ chmod +x ~/bc250-cu-live-manager.sh
 >
 > Current versions re-launch themselves with `sudo` when a command needs root. The examples
 > here keep `sudo` explicit anyway. Since mid-2026 the script also has a separate
-> `cpu-unlock` command (6c/12t → 8c/16t via the SMU) that this guide doesn't cover; see the
-> [hub README](../README.md#cpu-cores-related).
+> `cpu-unlock` command (6c/12t → 8c/16t via the SMU), covered in the
+> [8-core unlock page](cpu-8core-unlock-bazzite.md).
 
 ## Step 3 — Read your harvest map (read-only)
 
