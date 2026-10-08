@@ -21,7 +21,8 @@ systemctl reboot
 sudo dnf copr enable filippor/bazzite
 sudo dnf install cyan-skillfish-governor-smu
 
-# Arch: AUR package          →  paru -S cyan-skillfish-governor-smu
+# Arch: AUR package (by the governor's author)  →  yay -S cyan-skillfish-governor-smu  (or paru)
+#   tested on Omarchy: see omarchy-arch.md
 # Debian / others: a .deb or release tarball from GitHub Releases (see upstream README)
 
 sudo systemctl enable --now cyan-skillfish-governor-smu.service
@@ -60,7 +61,7 @@ fix-freq = false       # work around unreliable sysfs freq readings (e.g. after 
 enabled = true         # runtime control via busctl / cyan-skillfish-performance-mode
 
 [frequency-range]
-min = 1000    # MHz — floor
+min = 1000    # MHz — floor (500 is a shipped safe point and saves ~10 W idle, see below)
 max = 1850    # MHz — ceiling (omit the key for no limit; do NOT set 0, see below)
 
 [load-target]
@@ -133,7 +134,8 @@ How to read it:
 - **Throughput matches June within 1 %** at every point (873/983/1062/1144 then). Four
   months of kernel, Mesa and governor updates changed nothing on the compute side.
 - **PPT is package power (CPU + GPU)**, so it isn't only the GPU (loading all CPU threads adds
-  ~34 W). The board idles at ~43 W package with or without the
+  ~34 W). The board idles at ~43 W package (~33 W with a
+  [500 MHz floor](#lowering-the-floor-to-500-mhz-10-w-less-at-idle)) with or without the
   [CPU ACPI fix](cpu-acpi-fix-bazzite.md). The sweep ran before the fix, but the fix changes
   neither idle power nor GPU-bound results.
 - **`vddgfx` reads below the safe-point voltages** (e.g. 919 mV at 2000 MHz vs a 960 mV
@@ -294,8 +296,55 @@ Takeaways for this board:
   output, or use the script above, which stops at the first mismatch. Keep at least one passing
   step of margin below the value you settle on.
 
+## Lowering the floor to 500 MHz (10 W less at idle)
+
+The shipped config sets `min = 1000`, but the voltage curve starts lower: its first safe point is
+**500 MHz / 700 mV**. Letting the governor use it is the biggest idle saving we've found on this
+board.
+
+**Measured (Oct 2026, Omarchy, 40 CU + 8 cores, governor v0.4.14):** idle, desktop logged in,
+floor alternated 1000 → 500 → 1000 → 500 so drift can't fake the result. 30 s to settle, then
+180 s of 1 s samples each:
+
+| Floor | Package power (avg / min) | vddgfx | GPU edge | CPU Tctl |
+|---|---|---|---|---|
+| 1000 MHz | 43.7 / 42.5 W | 793 mV | 58.3 °C | 59.5 °C |
+| **500 MHz** | **33.6 / 32.6 W** | 699 mV | 53.9 °C | 56.1 °C |
+| 1000 MHz | 42.7 / 41.6 W | 793 mV | 56.4 °C | 57.4 °C |
+| **500 MHz** | **33.4 / 32.5 W** | 699 mV | 53.1 °C | 55.2 °C |
+
+| llama.cpp `b11382` | Floor 1000 | Floor 500 |
+|---|---|---|
+| pp512 | 1073.2 tok/s | 1073.4 tok/s |
+| tg128 | 141.0 tok/s | 140.4 tok/s |
+
+- **−9.7 W at idle (−22 %)** and 3–4 °C cooler, with no throughput loss: the governor ramps up
+  under load just as before.
+- **It isn't an undervolt.** 500 MHz / 700 mV is a shipped safe point; the stock `min` just never
+  let the governor reach it.
+- **Not measured:** how the desktop feels (a longer ramp from 500 MHz could show up as a short
+  stutter when something starts). We didn't notice one, but we didn't test for it either.
+- **It should apply to Bazzite too.** The governor, version and config are the same, and the idle
+  power at 1000 MHz matched within 0.4 W, but we only measured the 500 MHz floor on Omarchy.
+
+Try it at runtime first, without root, through D-Bus (it resets when the governor restarts):
+
+```bash
+busctl --system set-property com.cyanskillfish.Governor \
+  /com/cyanskillfish/Governor/Range/Current com.cyanskillfish.Governor.Range Min u 500
+```
+
+Then make it permanent:
+
+```bash
+sudo sed -i 's/^min = 1000\b/min = 500/' /etc/cyan-skillfish-governor-smu/config.toml
+sudo systemctl restart cyan-skillfish-governor-smu
+```
+
 ## Recommended starting point
 
+- **Floor: `min = 500`** ([above](#lowering-the-floor-to-500-mhz-10-w-less-at-idle)): ~10 W
+  less at idle, same throughput.
 - **Efficiency:** `max = 1700` (best tok/s per watt) — ~87 % of peak throughput. On a board
   with poor airflow it's also the highest point that stays clear of the 85 °C throttle (83 °C
   avg in our hot run).

@@ -171,7 +171,10 @@ login. Three small pieces:
    X-KDE-autostart-phase=2
    ```
    `notify-send` ≥ 0.7.9 supports `--action` and blocks until you choose. `--urgency=critical`
-   keeps it on screen in Plasma until you click.
+   keeps it on screen in Plasma until you click. Notification servers that draw no buttons
+   (Omarchy's) only run a `default` action on click; the
+   [Omarchy page](omarchy-arch.md#8-core-unlock-re-apply-service-and-reboot-notice) has a
+   version that works on both.
 
 3. **A terminal prompt** for interactive shells (Konsole or SSH). It never shows in scripts or
    `ssh host cmd`, and it defaults to *No* after 20 s:

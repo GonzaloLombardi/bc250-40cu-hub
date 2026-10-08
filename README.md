@@ -7,15 +7,18 @@ and **6 of 8 CPU cores** active.
 It started as a hub for the 40 CU unlock and grew from there: GPU unlock and masking, governor
 and voltage tuning, CPU unlock and ACPI fix, display quirks. This repo does **not** replace the
 tools that already exist. It **indexes** them, explains *which method fits which situation*, and
-adds what was missing: **step-by-step guides applied and measured on a real board**, mostly on
-**Bazzite** (immutable / atomic Fedora).
+adds what was missing: **step-by-step guides applied and measured on a real board**, on
+**Bazzite** (immutable / atomic Fedora) and **Omarchy** (Arch + Hyprland).
 
 > **New here?**
 > - **40 CU unlock on Bazzite / Fedora Atomic** → the **[runtime-UMR guide »](docs/bazzite-40cu-runtime-umr.md)**
+> - **Everything on Omarchy / Arch** → the **[Omarchy page »](docs/omarchy-arch.md)** (all tweaks, tested,
+>   with a Bazzite comparison)
 > - **40 CU unlock on a normal/mutable distro** → either the [kernel patch](docs/kernel-patch-mutable-distros.md)
 >   from duggasco (repo **archived** Sept 2026, still usable) or the same runtime-UMR tool, which
 >   now supports apt / pacman / dnf too
-> - **Clocks, temps, power** → [governor tuning](docs/governor-tuning.md)
+> - **Clocks, temps, power** → [governor tuning](docs/governor-tuning.md) (start with the
+>   [500 MHz floor](docs/governor-tuning.md#lowering-the-floor-to-500-mhz-10-w-less-at-idle): ~10 W less at idle)
 > - **CPU** → [ACPI fix](docs/cpu-acpi-fix-bazzite.md), then the [8-core unlock](docs/cpu-8core-unlock-bazzite.md)
 > - **640x480 or black screen through a DP→HDMI adapter** → [display fix](docs/display-no-edid-adapter.md)
 
@@ -68,8 +71,8 @@ adds what was missing: **step-by-step guides applied and measured on a real boar
 
 ## Guides in this repo
 
-Every guide below except the kernel-patch reference was applied and measured on our test board
-(Bazzite 44).
+Every guide below except the kernel-patch reference was applied and measured on our test board,
+first on Bazzite 44, then again on Omarchy 4.0.4.
 
 ### GPU
 - 📘 **[Unlocking 40 CUs on Bazzite (runtime-UMR)](docs/bazzite-40cu-runtime-umr.md)** —
@@ -89,6 +92,7 @@ Every guide below except the kernel-patch reference was applied and measured on 
   (1500/1700/1850/2000 MHz → throughput, voltage, temp, package power, tok/s per W), the
   **1700 MHz efficiency sweet spot**, voltage-curve interpolation, D-Bus frequency pinning,
   a real before/after showing how much airflow changes temps (73 °C vs 91 °C at the same clock),
+  a **500 MHz floor that cuts idle power by ~10 W (43 → 33 W) with no throughput loss**,
   and an **undervolt test that caught silent miscompute** (wrong output, no crash) just 40 mV
   below stock.
 
@@ -106,6 +110,13 @@ Every guide below except the kernel-patch reference was applied and measured on 
 - 🖥️ **[Display stuck at 640x480 / black after reboot (DP→HDMI adapter)](docs/display-no-edid-adapter.md)** —
   when the adapter doesn't pass EDID: diagnose it, force 1080p system-wide with `video=`, fix the
   saved KDE / login-screen modes. Tested through a capture card across warm and cold boots.
+
+### Arch / Omarchy
+- 🐧 **[BC-250 on Omarchy (Arch + Hyprland)](docs/omarchy-arch.md)** — every tweak above re-applied
+  on Omarchy 4.0.4 and tested across warm and cold boots: AUR packages, the mkinitcpio
+  `acpi_override` hook, `limine-entry-tool` kernel args, Hyprland Lua config, a reboot notice
+  that works without notification buttons, and an unattended install from a single USB stick.
+  **GPU benchmarks match Bazzite within 0.4 %.**
 
 ### Scripts
 Validate and measure a board:
@@ -218,7 +229,8 @@ Same boards, same tools, and the same thermal budget as the GPU:
 
 Done so far: the 40 CU guide (June 2026, re-tested Oct 2026), WGP masking with masking-cost
 measurements, the governor sweep on v0.4.14, the undervolt correctness test (no usable margin,
-stock kept), the CPU ACPI fix and 8-core unlock, the display/EDID fix, and an upstream bug report
+stock kept), the CPU ACPI fix and 8-core unlock, the display/EDID fix, the Omarchy port with a
+Bazzite-vs-Omarchy benchmark and the 500 MHz idle floor (Oct 2026), and an upstream bug report
 ([bc250-cu-live-manager#3](https://github.com/WinnieLV/bc250-cu-live-manager/issues/3), fixed in
 `ce4e373`). The full history is in the git log.
 
@@ -227,7 +239,9 @@ Open:
       governor wrapper)
 - [ ] Re-run the sweep if the test board's airflow changes (it's cooled by an external fan;
       idle temps were high in Oct 2026)
-- [ ] Optional: a tested Arch / Omarchy page (runtime-UMR with `umr` from AUR)
+- [x] A tested Arch / Omarchy page ([omarchy-arch.md](docs/omarchy-arch.md))
+- [ ] Measure the 500 MHz floor on Bazzite too (expected to match; only measured on Omarchy)
+- [ ] Re-run 7-Zip on both systems with the same 7-Zip version
 - [ ] Optional: screenshots / asciinema of `status` + benchmark
 
 ---
